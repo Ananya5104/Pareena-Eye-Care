@@ -1,0 +1,2590 @@
+openapi: 3.0.3
+info:
+  title: Pareena Eye Care Center API
+  version: 1.0.0
+  description: Appointments, video consultations, frames store and orders.
+paths:
+  /api/v1/appointments/:
+    get:
+      operationId: api_v1_appointments_list
+      description: Book an eye test (anyone) and list your own bookings (signed-in
+        users).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAppointmentList'
+          description: ''
+    post:
+      operationId: api_v1_appointments_create
+      description: Book an eye test (anyone) and list your own bookings (signed-in
+        users).
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AppointmentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Appointment'
+          description: ''
+  /api/v1/appointments/calendar/:
+    get:
+      operationId: api_v1_appointments_calendar_retrieve
+      description: Bookable date window plus closed weekdays/dates, for the date picker.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCalendar'
+          description: ''
+  /api/v1/appointments/slots/:
+    get:
+      operationId: api_v1_appointments_slots_retrieve
+      description: Time slots for one day, with availability.
+      parameters:
+      - in: query
+        name: date
+        schema:
+          type: string
+        description: YYYY-MM-DD
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DaySlots'
+          description: ''
+  /api/v1/auth/code/:
+    post:
+      operationId: api_v1_auth_code_create
+      description: Email a 6-digit sign-in code. Signing in with a new email creates
+        the account.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestCodeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestCodeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequestCodeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeSent'
+          description: ''
+  /api/v1/auth/me/:
+    get:
+      operationId: api_v1_auth_me_retrieve
+      description: Current user. PATCH `name` and/or `phone`.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: api_v1_auth_me_partial_update
+      description: Current user. PATCH `name` and/or `phone`.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserRequest'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: api_v1_auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/auth/verify/:
+    post:
+      operationId: api_v1_auth_verify_create
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyCodeRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerifyCodeRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerifyCodeRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+          description: ''
+  /api/v1/brands/:
+    get:
+      operationId: api_v1_brands_list
+      parameters:
+      - in: query
+        name: is_featured
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Brand'
+          description: ''
+  /api/v1/brands/{slug}/:
+    get:
+      operationId: api_v1_brands_retrieve
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Brand'
+          description: ''
+  /api/v1/clinic/:
+    get:
+      operationId: api_v1_clinic_retrieve
+      description: Everything the Home and About pages need in a single request.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClinicInfo'
+          description: ''
+  /api/v1/consultations/:
+    get:
+      operationId: api_v1_consultations_list
+      description: |-
+        create:   Submit a video consultation request (multipart, up to 3 photos). Rate limited.
+        retrieve: Check status by the reference UUID returned on create.
+        list:     Your own requests (signed-in users only).
+        lookup:   Statuses for several references at once (for guests' saved requests).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConsultationStatusList'
+          description: ''
+    post:
+      operationId: api_v1_consultations_create
+      description: |-
+        create:   Submit a video consultation request (multipart, up to 3 photos). Rate limited.
+        retrieve: Check status by the reference UUID returned on create.
+        list:     Your own requests (signed-in users only).
+        lookup:   Statuses for several references at once (for guests' saved requests).
+      tags:
+      - api
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ConsultationRequestRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ConsultationRequestRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultationRequestRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationRequest'
+          description: ''
+  /api/v1/consultations/{reference}/:
+    get:
+      operationId: api_v1_consultations_retrieve
+      description: |-
+        create:   Submit a video consultation request (multipart, up to 3 photos). Rate limited.
+        retrieve: Check status by the reference UUID returned on create.
+        list:     Your own requests (signed-in users only).
+        lookup:   Statuses for several references at once (for guests' saved requests).
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationStatus'
+          description: ''
+  /api/v1/consultations/lookup/:
+    get:
+      operationId: api_v1_consultations_lookup_list
+      description: |-
+        create:   Submit a video consultation request (multipart, up to 3 photos). Rate limited.
+        retrieve: Check status by the reference UUID returned on create.
+        list:     Your own requests (signed-in users only).
+        lookup:   Statuses for several references at once (for guests' saved requests).
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: query
+        name: refs
+        schema:
+          type: string
+        description: Comma-separated references (max 20)
+        required: true
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedConsultationStatusList'
+          description: ''
+  /api/v1/health/:
+    get:
+      operationId: api_v1_health_retrieve
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+          description: ''
+  /api/v1/lens-types/:
+    get:
+      operationId: api_v1_lens_types_list
+      description: Lens options. `?guide=true` returns only those shown on the Lens
+        Guide page.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LensType'
+          description: ''
+  /api/v1/lens-types/{slug}/:
+    get:
+      operationId: api_v1_lens_types_retrieve
+      description: Lens options. `?guide=true` returns only those shown on the Lens
+        Guide page.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          description: 'The website draws a diagram for: single, blue, glare, photo,
+            prog.'
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LensType'
+          description: ''
+  /api/v1/orders/:
+    get:
+      operationId: api_v1_orders_list
+      description: Place orders (guest or signed-in), look them up by reference, and
+        pay online.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrderList'
+          description: ''
+    post:
+      operationId: api_v1_orders_create
+      description: Place orders (guest or signed-in), look them up by reference, and
+        pay online.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrderCreateRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderWithPayment'
+          description: ''
+  /api/v1/orders/{reference}/:
+    get:
+      operationId: api_v1_orders_retrieve
+      description: Place orders (guest or signed-in), look them up by reference, and
+        pay online.
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+          description: ''
+  /api/v1/orders/{reference}/pay/:
+    post:
+      operationId: api_v1_orders_pay_create
+      description: Start (or retry) online payment for an unpaid order.
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderWithPayment'
+          description: ''
+  /api/v1/orders/{reference}/pay-at-store/:
+    post:
+      operationId: api_v1_orders_pay_at_store_create
+      description: Switch an unpaid online order to pay-at-store.
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderWithPayment'
+          description: ''
+  /api/v1/orders/{reference}/payment-failed/:
+    post:
+      operationId: api_v1_orders_payment_failed_create
+      description: Record that the customer's payment attempt failed or was abandoned.
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderWithPayment'
+          description: ''
+  /api/v1/orders/{reference}/verify-payment/:
+    post:
+      operationId: api_v1_orders_verify_payment_create
+      description: Place orders (guest or signed-in), look them up by reference, and
+        pay online.
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyPaymentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerifyPaymentRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerifyPaymentRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderWithPayment'
+          description: ''
+  /api/v1/prescriptions/:
+    get:
+      operationId: api_v1_prescriptions_list
+      description: Save an eyesight prescription (JSON, or multipart with `upload`).
+        Retrieve by reference UUID.
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPrescriptionList'
+          description: ''
+    post:
+      operationId: api_v1_prescriptions_create
+      description: Save an eyesight prescription (JSON, or multipart with `upload`).
+        Retrieve by reference UUID.
+      tags:
+      - api
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrescriptionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PrescriptionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PrescriptionRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prescription'
+          description: ''
+  /api/v1/prescriptions/{reference}/:
+    get:
+      operationId: api_v1_prescriptions_retrieve
+      description: Save an eyesight prescription (JSON, or multipart with `upload`).
+        Retrieve by reference UUID.
+      parameters:
+      - in: path
+        name: reference
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Prescription'
+          description: ''
+  /api/v1/products/:
+    get:
+      operationId: api_v1_products_list
+      description: Frames & sunglasses. Filter by brand, category, gender, shape,
+        frame_type, fit, price range.
+      parameters:
+      - in: query
+        name: brand
+        schema:
+          type: string
+      - in: query
+        name: category
+        schema:
+          type: string
+          enum:
+          - eyeglasses
+          - sunglasses
+        description: |-
+          * `eyeglasses` - Eyeglasses (frames)
+          * `sunglasses` - Sunglasses
+      - in: query
+        name: featured
+        schema:
+          type: boolean
+      - in: query
+        name: fit
+        schema:
+          type: string
+          enum:
+          - kids
+          - large
+          - medium
+          - small
+        description: |-
+          * `small` - Small
+          * `medium` - Medium
+          * `large` - Large
+          * `kids` - Kids
+      - in: query
+        name: frame_type
+        schema:
+          type: string
+          enum:
+          - full_rim
+          - half_rim
+          - rimless
+        description: |-
+          * `full_rim` - Full rim
+          * `half_rim` - Half rim
+          * `rimless` - Rimless
+      - in: query
+        name: gender
+        schema:
+          type: string
+          enum:
+          - kids
+          - men
+          - unisex
+          - women
+        description: |-
+          * `men` - Men
+          * `women` - Women
+          * `unisex` - Unisex
+          * `kids` - Kids
+      - in: query
+        name: max_price
+        schema:
+          type: number
+      - in: query
+        name: min_price
+        schema:
+          type: number
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      - in: query
+        name: shape
+        schema:
+          type: string
+          enum:
+          - aviator
+          - cat_eye
+          - clubmaster
+          - geometric
+          - oval
+          - rectangle
+          - round
+          - square
+          - wayfarer
+        description: |-
+          * `round` - Round
+          * `rectangle` - Rectangle
+          * `square` - Square
+          * `oval` - Oval
+          * `cat_eye` - Cat-eye
+          * `aviator` - Aviator
+          * `wayfarer` - Wayfarer
+          * `clubmaster` - Clubmaster
+          * `geometric` - Geometric
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProductListList'
+          description: ''
+  /api/v1/products/{slug}/:
+    get:
+      operationId: api_v1_products_retrieve
+      description: Frames & sunglasses. Filter by brand, category, gender, shape,
+        frame_type, fit, price range.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+        required: true
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetail'
+          description: ''
+  /api/v1/products/facets/:
+    get:
+      operationId: api_v1_products_facets_retrieve
+      description: Filter options for the shop sidebar.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductFacets'
+          description: ''
+  /api/v1/reviews/:
+    get:
+      operationId: api_v1_reviews_retrieve
+      description: Google rating and latest reviews, or null when not connected.
+      tags:
+      - api
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GoogleReviews'
+          description: ''
+components:
+  schemas:
+    Appointment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+          minLength: 2
+        phone:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        for_whom:
+          type: string
+          maxLength: 40
+        reason:
+          type: string
+          maxLength: 120
+          minLength: 3
+        notes:
+          type: string
+          maxLength: 1000
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          format: time
+        duration_minutes:
+          type: integer
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AppointmentStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - date
+      - duration_minutes
+      - id
+      - name
+      - phone
+      - reason
+      - status
+      - time
+    AppointmentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        for_whom:
+          type: string
+          minLength: 1
+          maxLength: 40
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 120
+        notes:
+          type: string
+          maxLength: 1000
+        date:
+          type: string
+          format: date
+        time:
+          type: string
+          format: time
+      required:
+      - date
+      - name
+      - phone
+      - reason
+      - time
+    AppointmentStatusEnum:
+      enum:
+      - pending
+      - approved
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `approved` - Approved
+        * `completed` - Completed
+        * `cancelled` - Cancelled
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        access:
+          type: string
+        refresh:
+          type: string
+        is_new:
+          type: boolean
+      required:
+      - access
+      - is_new
+      - refresh
+      - user
+    BookingCalendar:
+      type: object
+      properties:
+        first_date:
+          type: string
+          format: date
+        last_date:
+          type: string
+          format: date
+        closed_weekdays:
+          type: array
+          items:
+            type: integer
+        closed_dates:
+          type: array
+          items:
+            type: string
+            format: date
+      required:
+      - closed_dates
+      - closed_weekdays
+      - first_date
+      - last_date
+    Brand:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 80
+        slug:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        logo:
+          type: string
+          format: uri
+        description:
+          type: string
+          maxLength: 300
+        product_count:
+          type: integer
+          readOnly: true
+      required:
+      - id
+      - name
+      - product_count
+    BusinessHours:
+      type: object
+      properties:
+        weekday:
+          allOf:
+          - $ref: '#/components/schemas/WeekdayEnum'
+          minimum: 0
+          maximum: 9223372036854775807
+        weekday_name:
+          type: string
+          readOnly: true
+        open_time:
+          type: string
+          format: time
+        close_time:
+          type: string
+          format: time
+        is_closed:
+          type: boolean
+      required:
+      - close_time
+      - open_time
+      - weekday
+      - weekday_name
+    CategoryEnum:
+      enum:
+      - eyeglasses
+      - sunglasses
+      type: string
+      description: |-
+        * `eyeglasses` - Eyeglasses (frames)
+        * `sunglasses` - Sunglasses
+    ClinicInfo:
+      type: object
+      properties:
+        clinic:
+          $ref: '#/components/schemas/ClinicSettings'
+        optometrists:
+          type: array
+          items:
+            $ref: '#/components/schemas/Optometrist'
+        testimonials:
+          type: array
+          items:
+            $ref: '#/components/schemas/Testimonial'
+        gallery:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreImage'
+      required:
+      - clinic
+      - gallery
+      - optometrists
+      - testimonials
+    ClinicSettings:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+        tagline:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        philosophy:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+          maxLength: 20
+        whatsapp_number:
+          type: string
+          description: Digits with country code, e.g. 919876543210
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        google_maps_embed_url:
+          type: string
+          format: uri
+          description: Google Maps → Share → Embed a map → copy only the src URL.
+          maxLength: 1000
+        google_maps_link:
+          type: string
+          format: uri
+          maxLength: 500
+        slot_duration_minutes:
+          allOf:
+          - $ref: '#/components/schemas/SlotDurationMinutesEnum'
+          minimum: 0
+          maximum: 9223372036854775807
+        booking_window_days:
+          type: integer
+          maximum: 180
+          minimum: 1
+          description: How many days ahead patients can book.
+        consultations_enabled:
+          type: boolean
+        online_payments_available:
+          type: boolean
+          readOnly: true
+        business_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/BusinessHours'
+          readOnly: true
+      required:
+      - business_hours
+      - online_payments_available
+    CodeSent:
+      type: object
+      properties:
+        sent:
+          type: boolean
+        resend_in:
+          type: integer
+      required:
+      - resend_in
+      - sent
+    ConsultationRequest:
+      type: object
+      description: 'Multipart: send `issues` and `photos` as repeated form fields.'
+      properties:
+        reference:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+          minLength: 2
+        phone:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuesEnum'
+          maxItems: 6
+          minItems: 1
+        since:
+          $ref: '#/components/schemas/SinceEnum'
+        eye:
+          $ref: '#/components/schemas/EyeEnum'
+        preferred_time:
+          $ref: '#/components/schemas/PreferredTimeEnum'
+        issue_description:
+          type: string
+          maxLength: 1000
+          minLength: 20
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ConsultationStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - issue_description
+      - issues
+      - name
+      - phone
+      - reference
+      - status
+    ConsultationRequestRequest:
+      type: object
+      description: 'Multipart: send `issues` and `photos` as repeated form fields.'
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuesEnum'
+          maxItems: 6
+          minItems: 1
+        since:
+          $ref: '#/components/schemas/SinceEnum'
+        eye:
+          $ref: '#/components/schemas/EyeEnum'
+        preferred_time:
+          $ref: '#/components/schemas/PreferredTimeEnum'
+        issue_description:
+          type: string
+          minLength: 20
+          maxLength: 1000
+        photos:
+          type: array
+          items:
+            type: string
+            format: binary
+          writeOnly: true
+          maxItems: 3
+      required:
+      - issue_description
+      - issues
+      - name
+      - phone
+    ConsultationStatus:
+      type: object
+      description: Public status lookup by reference. The Meet link only appears once
+        approved.
+      properties:
+        reference:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/ConsultationStatusEnum'
+        issues:
+          description: List of issue codes.
+        preferred_time:
+          $ref: '#/components/schemas/PreferredTimeEnum'
+        preferred_time_display:
+          type: string
+          readOnly: true
+        photo_count:
+          type: integer
+          readOnly: true
+        scheduled_for:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the video call will happen.
+        meet_link:
+          type: string
+          nullable: true
+          readOnly: true
+        patient_notes:
+          type: string
+          nullable: true
+          readOnly: true
+        rejection_reason:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - meet_link
+      - patient_notes
+      - photo_count
+      - preferred_time_display
+      - reference
+      - rejection_reason
+    ConsultationStatusEnum:
+      enum:
+      - pending
+      - approved
+      - completed
+      - rejected
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `approved` - Approved
+        * `completed` - Completed
+        * `rejected` - Rejected
+    DaySlots:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        slot_duration_minutes:
+          type: integer
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+      required:
+      - date
+      - slot_duration_minutes
+      - slots
+    EyeEnum:
+      enum:
+      - both
+      - right
+      - left
+      type: string
+      description: |-
+        * `both` - Both
+        * `right` - Right
+        * `left` - Left
+    FitEnum:
+      enum:
+      - small
+      - medium
+      - large
+      - kids
+      type: string
+      description: |-
+        * `small` - Small
+        * `medium` - Medium
+        * `large` - Large
+        * `kids` - Kids
+    FrameTypeEnum:
+      enum:
+      - full_rim
+      - half_rim
+      - rimless
+      type: string
+      description: |-
+        * `full_rim` - Full rim
+        * `half_rim` - Half rim
+        * `rimless` - Rimless
+    GenderEnum:
+      enum:
+      - men
+      - women
+      - unisex
+      - kids
+      type: string
+      description: |-
+        * `men` - Men
+        * `women` - Women
+        * `unisex` - Unisex
+        * `kids` - Kids
+    GoogleReviews:
+      type: object
+      properties:
+        rating:
+          type: number
+          format: double
+        total:
+          type: integer
+        url:
+          type: string
+          format: uri
+        reviews:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - rating
+      - reviews
+      - total
+      - url
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+      - status
+    HingesEnum:
+      enum:
+      - standard
+      - spring
+      - flexible
+      type: string
+      description: |-
+        * `standard` - Standard hinges
+        * `spring` - Spring hinges
+        * `flexible` - Flexible hinges
+    IssuesEnum:
+      enum:
+      - red_eyes
+      - dry_eyes
+      - itching
+      - irritation
+      - lens_discomfort
+      - other
+      type: string
+      description: |-
+        * `red_eyes` - Red eyes
+        * `dry_eyes` - Dry eyes
+        * `itching` - Itching
+        * `irritation` - Irritation
+        * `lens_discomfort` - Lens discomfort
+        * `other` - Something else
+    LensType:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          description: 'The website draws a diagram for: single, blue, glare, photo,
+            prog.'
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 80
+        short_description:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          description: Longer explanation on the Lens Guide page.
+        good_for:
+          type: string
+          maxLength: 255
+        ready_in:
+          type: string
+          maxLength: 40
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        works_without_power:
+          type: boolean
+          description: Can be made as plain (zero-power) lenses, e.g. blue light or
+            anti-glare.
+        requires_addition:
+          type: boolean
+          description: Needs a reading addition (ADD) in the prescription, e.g. progressive
+            lenses.
+      required:
+      - description
+      - id
+      - name
+      - short_description
+    Optometrist:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        photo:
+          type: string
+          format: uri
+        qualifications:
+          type: string
+          description: e.g. B.Optom, M.Optom
+          maxLength: 255
+        experience_years:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        specialization:
+          type: string
+          maxLength: 255
+        bio:
+          type: string
+      required:
+      - id
+      - name
+      - qualifications
+    Order:
+      type: object
+      properties:
+        reference:
+          type: string
+          format: uuid
+          readOnly: true
+        order_number:
+          type: string
+          readOnly: true
+        customer_name:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        notes:
+          type: string
+          maxLength: 500
+        status:
+          $ref: '#/components/schemas/OrderStatusEnum'
+        status_display:
+          type: string
+          readOnly: true
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethodEnum'
+        payment_status:
+          $ref: '#/components/schemas/PaymentStatusEnum'
+        total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - customer_name
+      - items
+      - order_number
+      - phone
+      - reference
+      - status_display
+    OrderCreateRequest:
+      type: object
+      properties:
+        customer_name:
+          type: string
+          minLength: 2
+          maxLength: 120
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 20
+        email:
+          type: string
+          format: email
+        notes:
+          type: string
+          maxLength: 500
+        payment_method:
+          $ref: '#/components/schemas/PaymentMethodEnum'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItemInputRequest'
+      required:
+      - customer_name
+      - items
+      - payment_method
+      - phone
+    OrderItem:
+      type: object
+      properties:
+        product_name:
+          type: string
+          maxLength: 200
+        product_slug:
+          type: string
+          readOnly: true
+        brand:
+          type: string
+          readOnly: true
+        category:
+          type: string
+          readOnly: true
+        image:
+          type: string
+          format: uri
+          readOnly: true
+        color_name:
+          type: string
+          maxLength: 60
+        lens_name:
+          type: string
+          maxLength: 80
+        prescription_name:
+          type: string
+          readOnly: true
+        frame_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        lens_price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        quantity:
+          type: integer
+          maximum: 5
+          minimum: 1
+        line_total:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+      required:
+      - brand
+      - category
+      - color_name
+      - frame_price
+      - image
+      - line_total
+      - prescription_name
+      - product_name
+      - product_slug
+    OrderItemInputRequest:
+      type: object
+      properties:
+        variant_id:
+          type: integer
+        lens_type_id:
+          type: integer
+          nullable: true
+        prescription_reference:
+          type: string
+          format: uuid
+          nullable: true
+        quantity:
+          type: integer
+          maximum: 5
+          minimum: 1
+          default: 1
+      required:
+      - variant_id
+    OrderStatusEnum:
+      enum:
+      - placed
+      - confirmed
+      - in_progress
+      - ready
+      - completed
+      - cancelled
+      type: string
+      description: |-
+        * `placed` - Placed
+        * `confirmed` - Confirmed
+        * `in_progress` - In the lab
+        * `ready` - Ready to collect
+        * `completed` - Collected
+        * `cancelled` - Cancelled
+    OrderWithPayment:
+      type: object
+      properties:
+        payment:
+          allOf:
+          - $ref: '#/components/schemas/RazorpayCheckout'
+          nullable: true
+        order:
+          $ref: '#/components/schemas/Order'
+      required:
+      - order
+      - payment
+    PaginatedAppointmentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Appointment'
+    PaginatedConsultationStatusList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConsultationStatus'
+    PaginatedOrderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+    PaginatedPrescriptionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Prescription'
+    PaginatedProductListList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductList'
+    PatchedUserRequest:
+      type: object
+      description: The signed-in customer. `name` is stored across Django's first/last
+        name fields.
+      properties:
+        name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 20
+    PaymentMethodEnum:
+      enum:
+      - online
+      - store
+      type: string
+      description: |-
+        * `online` - Pay online
+        * `store` - Pay at store
+    PaymentStatusEnum:
+      enum:
+      - pending
+      - paid
+      - failed
+      - refunded
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `paid` - Paid
+        * `failed` - Failed
+        * `refunded` - Refunded
+    PreferredTimeEnum:
+      enum:
+      - today_evening
+      - tomorrow_morning
+      - tomorrow_evening
+      - any
+      type: string
+      description: |-
+        * `today_evening` - Today, evening (5 to 8 pm)
+        * `tomorrow_morning` - Tomorrow, morning
+        * `tomorrow_evening` - Tomorrow, evening
+        * `any` - Any time
+    Prescription:
+      type: object
+      properties:
+        reference:
+          type: string
+          format: uuid
+          readOnly: true
+        patient_name:
+          type: string
+          maxLength: 120
+          minLength: 1
+        prescription_date:
+          type: string
+          maxLength: 40
+        right_sph:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        right_cyl:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        right_axis:
+          type: integer
+          maximum: 180
+          minimum: 0
+          nullable: true
+        right_add:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        left_sph:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        left_cyl:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        left_axis:
+          type: integer
+          maximum: 180
+          minimum: 0
+          nullable: true
+        left_add:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        pupillary_distance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,1})?$
+          nullable: true
+        has_upload:
+          type: boolean
+          readOnly: true
+        summary:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - has_upload
+      - left_sph
+      - patient_name
+      - reference
+      - right_sph
+      - summary
+    PrescriptionRequest:
+      type: object
+      properties:
+        patient_name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        prescription_date:
+          type: string
+          maxLength: 40
+        right_sph:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        right_cyl:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        right_axis:
+          type: integer
+          maximum: 180
+          minimum: 0
+          nullable: true
+        right_add:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        left_sph:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        left_cyl:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+        left_axis:
+          type: integer
+          maximum: 180
+          minimum: 0
+          nullable: true
+        left_add:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          nullable: true
+        pupillary_distance:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,1})?$
+          nullable: true
+        upload:
+          type: string
+          format: binary
+          writeOnly: true
+          nullable: true
+      required:
+      - left_sph
+      - patient_name
+      - right_sph
+    ProductDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          maxLength: 200
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 150
+        brand:
+          type: string
+        brand_slug:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        gender:
+          $ref: '#/components/schemas/GenderEnum'
+        shape:
+          $ref: '#/components/schemas/ShapeEnum'
+        frame_type:
+          $ref: '#/components/schemas/FrameTypeEnum'
+        fit:
+          $ref: '#/components/schemas/FitEnum'
+        size_label:
+          type: string
+          readOnly: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Frame price. For sunglasses this includes the sun lenses.
+        mrp:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Optional original price, shown struck out.
+        image:
+          type: string
+          format: uri
+          readOnly: true
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+          readOnly: true
+        in_stock:
+          type: boolean
+          readOnly: true
+        is_featured:
+          type: boolean
+        model_number:
+          type: string
+          maxLength: 60
+        material:
+          type: string
+          description: e.g. Acetate, Metal, TR90
+          maxLength: 60
+        hinges:
+          $ref: '#/components/schemas/HingesEnum'
+        hinges_display:
+          type: string
+        frame_type_display:
+          type: string
+        weight_g:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+          nullable: true
+          description: Frame weight in grams.
+        description:
+          type: string
+        lens_width_mm:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        bridge_width_mm:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        temple_length_mm:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+        progressive_compatible:
+          type: boolean
+          description: Untick for frames too small for progressive lenses.
+        min_sph:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          nullable: true
+          description: Lowest SPH the frame takes, e.g. -8.00.
+        max_sph:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          nullable: true
+          description: Highest SPH the frame takes, e.g. 6.00.
+        power_range:
+          type: string
+          readOnly: true
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        lens_types:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+      required:
+      - brand
+      - brand_slug
+      - bridge_width_mm
+      - frame_type_display
+      - hinges_display
+      - id
+      - image
+      - images
+      - in_stock
+      - lens_types
+      - lens_width_mm
+      - name
+      - power_range
+      - price
+      - size_label
+      - temple_length_mm
+      - variants
+    ProductFacets:
+      type: object
+      properties:
+        brands:
+          type: array
+          items:
+            $ref: '#/components/schemas/Brand'
+        genders:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        shapes:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        frame_types:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+      required:
+      - brands
+      - frame_types
+      - genders
+      - shapes
+    ProductImage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        image:
+          type: string
+          format: uri
+        view:
+          $ref: '#/components/schemas/ViewEnum'
+        alt_text:
+          type: string
+          maxLength: 150
+        variant:
+          type: integer
+          nullable: true
+          description: 'Optional: link the image to a colour variant.'
+      required:
+      - id
+      - image
+    ProductList:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        slug:
+          type: string
+          maxLength: 200
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 150
+        brand:
+          type: string
+        brand_slug:
+          type: string
+        category:
+          $ref: '#/components/schemas/CategoryEnum'
+        gender:
+          $ref: '#/components/schemas/GenderEnum'
+        shape:
+          $ref: '#/components/schemas/ShapeEnum'
+        frame_type:
+          $ref: '#/components/schemas/FrameTypeEnum'
+        fit:
+          $ref: '#/components/schemas/FitEnum'
+        size_label:
+          type: string
+          readOnly: true
+        price:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          description: Frame price. For sunglasses this includes the sun lenses.
+        mrp:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          nullable: true
+          description: Optional original price, shown struck out.
+        image:
+          type: string
+          format: uri
+          readOnly: true
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductVariant'
+          readOnly: true
+        in_stock:
+          type: boolean
+          readOnly: true
+        is_featured:
+          type: boolean
+      required:
+      - brand
+      - brand_slug
+      - id
+      - image
+      - in_stock
+      - name
+      - price
+      - size_label
+      - variants
+    ProductVariant:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        color_name:
+          type: string
+          maxLength: 60
+        color_hex:
+          type: string
+          pattern: ^#[0-9a-fA-F]{6}$
+          maxLength: 7
+        stock:
+          type: integer
+          maximum: 9223372036854775807
+          minimum: 0
+          format: int64
+      required:
+      - color_name
+      - id
+    RazorpayCheckout:
+      type: object
+      properties:
+        key_id:
+          type: string
+        razorpay_order_id:
+          type: string
+        amount:
+          type: integer
+        currency:
+          type: string
+      required:
+      - amount
+      - currency
+      - key_id
+      - razorpay_order_id
+    RequestCodeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - email
+    ShapeEnum:
+      enum:
+      - round
+      - rectangle
+      - square
+      - oval
+      - cat_eye
+      - aviator
+      - wayfarer
+      - clubmaster
+      - geometric
+      type: string
+      description: |-
+        * `round` - Round
+        * `rectangle` - Rectangle
+        * `square` - Square
+        * `oval` - Oval
+        * `cat_eye` - Cat-eye
+        * `aviator` - Aviator
+        * `wayfarer` - Wayfarer
+        * `clubmaster` - Clubmaster
+        * `geometric` - Geometric
+    SinceEnum:
+      enum:
+      - today
+      - few_days
+      - week
+      - longer
+      type: string
+      description: |-
+        * `today` - Today
+        * `few_days` - 2 to 3 days
+        * `week` - About a week
+        * `longer` - Longer
+    Slot:
+      type: object
+      properties:
+        time:
+          type: string
+          format: time
+        available:
+          type: boolean
+      required:
+      - available
+      - time
+    SlotDurationMinutesEnum:
+      enum:
+      - 15
+      - 30
+      - 45
+      - 60
+      type: integer
+      description: |-
+        * `15` - 15 minutes
+        * `30` - 30 minutes
+        * `45` - 45 minutes
+        * `60` - 60 minutes
+    StoreImage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        image:
+          type: string
+          format: uri
+        caption:
+          type: string
+          maxLength: 140
+      required:
+      - id
+      - image
+    Testimonial:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        patient_name:
+          type: string
+          maxLength: 80
+        quote:
+          type: string
+          maxLength: 600
+        rating:
+          type: integer
+          maximum: 5
+          minimum: 1
+      required:
+      - id
+      - patient_name
+      - quote
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    TokenRefreshRequest:
+      type: object
+      properties:
+        refresh:
+          type: string
+          minLength: 1
+      required:
+      - refresh
+    User:
+      type: object
+      description: The signed-in customer. `name` is stored across Django's first/last
+        name fields.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+          readOnly: true
+          title: Email address
+        name:
+          type: string
+          maxLength: 150
+        phone:
+          type: string
+          maxLength: 20
+      required:
+      - email
+      - id
+    VerifyCodeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        code:
+          type: string
+          minLength: 1
+          pattern: ^\d{6}$
+      required:
+      - code
+      - email
+    VerifyPaymentRequest:
+      type: object
+      properties:
+        razorpay_order_id:
+          type: string
+          minLength: 1
+          maxLength: 60
+        razorpay_payment_id:
+          type: string
+          minLength: 1
+          maxLength: 60
+        razorpay_signature:
+          type: string
+          minLength: 1
+          maxLength: 200
+      required:
+      - razorpay_order_id
+      - razorpay_payment_id
+      - razorpay_signature
+    ViewEnum:
+      enum:
+      - front
+      - side
+      - angle
+      - on_face
+      type: string
+      description: |-
+        * `front` - Front
+        * `side` - Side
+        * `angle` - Angle
+        * `on_face` - On face
+    WeekdayEnum:
+      enum:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      type: integer
+      description: |-
+        * `0` - Monday
+        * `1` - Tuesday
+        * `2` - Wednesday
+        * `3` - Thursday
+        * `4` - Friday
+        * `5` - Saturday
+        * `6` - Sunday
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
