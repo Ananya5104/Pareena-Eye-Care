@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom'
 import Icon from '../components/Icon'
-import { SectionHeading } from '../components/ui'
-import { LENSES, inr } from '../data/catalog'
+import { ErrorState, Loading, SectionHeading } from '../components/ui'
+import { inr } from '../data/catalog'
 import { STORE } from '../data/store'
+import { getLenses } from '../lib/api'
+import useAsync from '../lib/useAsync'
 
 const T = { fontFamily: 'Barlow, sans-serif' }
 const DIAGRAMS = {
@@ -45,26 +47,25 @@ const DIAGRAMS = {
   ),
 }
 
-const LONG = {
-  single: 'One power across the whole lens, for seeing far or for reading.',
-  blue: 'Single vision with a coating that reflects some of the blue light from screens.',
-  glare: 'Single vision with a coating that cuts reflections, so others see your eyes and night lights halo less.',
-  photo: 'Clear indoors, darkens in sunlight in about a minute. One pair instead of two.',
-  prog: 'Far at the top, screen distance in the middle, reading at the bottom, with no visible line. Takes a week or two to get used to.',
-}
-
-const ROWS = [
-  ['Sees far or near', ['One of them', 'One of them', 'One of them', 'One of them', 'Both']],
-  ['Helps with screens', ['No', 'Yes', 'A little', 'No', 'Middle zone']],
-  ['Cuts reflections', ['No', 'Yes', 'Yes, most', 'Yes', 'Yes']],
-  ['Darkens in sun', ['No', 'No', 'No', 'Yes', 'Can be added']],
-  ['Works without power', LENSES.map((l) => (l.worksWithoutPower ? 'Yes' : 'No'))],
-  ['Needs ADD on prescription', LENSES.map((l) => (l.needsAdd ? 'Yes' : 'No'))],
-  ['Ready in', LENSES.map((l) => l.readyIn)],
+// Feature comparison, keyed by lens type slug (set in Admin → Lens types).
+const FEATURES = [
+  ['Sees far or near', { single: 'One of them', blue: 'One of them', glare: 'One of them', photo: 'One of them', prog: 'Both' }],
+  ['Helps with screens', { single: 'No', blue: 'Yes', glare: 'A little', photo: 'No', prog: 'Middle zone' }],
+  ['Cuts reflections', { single: 'No', blue: 'Yes', glare: 'Yes, most', photo: 'Yes', prog: 'Yes' }],
+  ['Darkens in sun', { single: 'No', blue: 'No', glare: 'No', photo: 'Yes', prog: 'Can be added' }],
+]
+const rowsFor = (lenses) => [
+  ...FEATURES.map(([label, byLens]) => [label, lenses.map((l) => byLens[l.id] || '—')]),
+  ['Works without power', lenses.map((l) => (l.worksWithoutPower ? 'Yes' : 'No'))],
+  ['Needs ADD on prescription', lenses.map((l) => (l.needsAdd ? 'Yes' : 'No'))],
+  ['Ready in', lenses.map((l) => l.readyIn)],
 ]
 const STRONG = new Set(['Both', 'Yes, most'])
 
 export default function LensGuide() {
+  const { data: lenses, error, reload } = useAsync(getLenses, [])
+  const LENSES = lenses || []
+  const ROWS = rowsFor(LENSES)
   return (
     <div className="wrap grid gap-10 pb-24 pt-8 md:gap-16 md:pt-14">
       <div className="grid max-w-[46em] gap-3">
@@ -72,16 +73,19 @@ export default function LensGuide() {
         <p className="lede text-[17px] leading-[26px] md:text-[19px] md:leading-[30px]">Five lens types, what each one does, and who it suits. Most people only need Single Vision. If you're over 40 and hold your phone further away to read, look at Progressive.</p>
       </div>
 
+      {error && <ErrorState title="We couldn't load the lens guide" onRetry={reload} />}
+      {!lenses && !error && <Loading>Loading lens types</Loading>}
+      {lenses && <>
       <section aria-label="Lens types" className="border-t border-ink">
         {LENSES.map((l) => (
           <article key={l.id} className="grid gap-2.5 border-b border-line py-5 md:grid-cols-[140px_minmax(0,1fr)_minmax(0,1fr)_140px] md:items-center md:gap-10 md:py-8">
             <div className="flex items-center gap-3.5 md:contents">
-              {DIAGRAMS[l.id]}
+              {DIAGRAMS[l.id] || DIAGRAMS.single}
               <div className="grid gap-0.5 md:hidden"><h2 className="display text-xl">{l.name}</h2><span className="help">From <span className="num font-semibold text-ink">{inr(l.price)}</span></span></div>
             </div>
             <div className="grid gap-1.5">
               <h2 className="display hidden text-2xl md:block">{l.name}</h2>
-              <p className="text-[15px] text-muted md:text-base">{LONG[l.id]}</p>
+              <p className="text-[15px] text-muted md:text-base">{l.description}</p>
             </div>
             <p className="text-[15px] md:text-base"><strong>Good for:</strong> {l.goodFor}</p>
             <p className="hidden text-right md:block"><span className="help">From</span><br /><span className="num text-xl font-semibold">{inr(l.price)}</span></p>
@@ -114,6 +118,8 @@ export default function LensGuide() {
           </table>
         </div>
       </section>
+
+      </>}
 
       <section className="grid gap-5 rounded-md border-[1.5px] border-navy bg-card p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-8 md:p-10">
         <div className="grid gap-2.5">

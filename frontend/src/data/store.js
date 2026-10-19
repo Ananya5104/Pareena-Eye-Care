@@ -7,8 +7,9 @@ export const STORE = {
   whatsappHref: 'https://wa.me/919963006059',
   email: 'pareenaeyecare@gmail.com',
   hours: [
-    { days: 'Monday to Saturday', short: 'Mon to Sat', time: '9 am to 8 pm' },
-    { days: 'Sunday', short: 'Sunday', time: '10 am to 6 pm' },
+    // Keep in step with Admin → Business hours, which controls the booking slots.
+    { days: 'Monday to Saturday', short: 'Mon to Sat', time: '10 am to 9 pm' },
+    { days: 'Sunday', short: 'Sunday', time: '11 am to 8 pm' },
   ],
   directionsHref: 'https://www.google.com/maps/search/?api=1&query=Pareena+Eye+Care+Center+Ameerpet+Hyderabad',
   mapEmbedSrc:

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Spinner } from '../components/Icon'
 import { Alert, Field, PhotoUpload, Select } from '../components/ui'
+import { errorMessage, savePrescription } from '../lib/api'
 import { STORE } from '../data/store'
 import { useApp } from '../state/AppState'
 
@@ -79,7 +81,7 @@ function Helper() {
 }
 
 export default function Prescription() {
-  const { savePrescription, setNoPower, noPower, user } = useApp()
+  const { addPrescription, setNoPower, noPower, user } = useApp()
   const [params] = useSearchParams()
   const next = params.get('next')
   const navigate = useNavigate()
@@ -92,8 +94,10 @@ export default function Prescription() {
   const [files, setFiles] = useState([])
   const [errors, setErrors] = useState(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault()
     if (off) {
       setNoPower(true)
@@ -104,9 +108,18 @@ export default function Prescription() {
     const count = (er.name ? 1 : 0) + Object.keys(er.right).length + Object.keys(er.left).length
     if (count) { setErrors({ ...er, count }); window.scrollTo({ top: 0 }); return }
     setErrors(null)
-    savePrescription({ name: name.trim(), right, left, pd, date, photo: files[0] ? files[0].name : null })
-    if (next) navigate(next)
-    else setSaved(true)
+    setSaving(true); setSaveError('')
+    try {
+      const rx = await savePrescription({ name: name.trim(), right, left, pd, date }, files[0])
+      addPrescription(rx)
+      if (next) navigate(next)
+      else setSaved(true)
+    } catch (err) {
+      setSaveError(errorMessage(err))
+      window.scrollTo({ top: 0 })
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (saved) {
@@ -130,6 +143,7 @@ export default function Prescription() {
       <div className="grid items-start gap-10 md:grid-cols-[1.5fr_1fr]">
         <form className="grid gap-7 md:card md:p-8" onSubmit={submit} noValidate>
           {errors && <Alert tone="bad" title={`${errors.count} ${errors.count === 1 ? 'value needs' : 'values need'} checking`}>Nothing is saved until they're fixed.</Alert>}
+          {saveError && <Alert tone="bad" title="Your prescription wasn't saved">{saveError}</Alert>}
 
           <label className={`flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-md px-4 py-2.5 ${off ? 'border-2 border-navy bg-card' : 'border border-line bg-surface'}`}>
             <span className="grid"><strong>I don't need power</strong><span className="help">For plain or fashion lenses, or sunglasses without power</span></span>
@@ -171,7 +185,7 @@ export default function Prescription() {
             <PhotoUpload files={files} onChange={setFiles} label="Add a photo and we'll double-check your numbers" hint="JPG, PNG or PDF, up to 10 MB" accept="image/*,application/pdf" />
           </div>
 
-          <button type="submit" className="btn btn-primary justify-self-start max-md:w-full">{off ? 'Continue to frames' : next ? 'Save and continue' : 'Save and choose frames'}</button>
+          <button type="submit" className="btn btn-primary justify-self-start max-md:w-full" disabled={saving} aria-busy={saving}>{saving ? <><Spinner />Saving</> : off ? 'Continue to frames' : next ? 'Save and continue' : 'Save and choose frames'}</button>
         </form>
         <Helper />
       </div>

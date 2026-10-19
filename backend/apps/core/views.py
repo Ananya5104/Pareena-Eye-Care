@@ -1,3 +1,4 @@
+from django.http import JsonResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework.response import Response
@@ -61,7 +62,8 @@ class ReviewsView(APIView):
         )
     )
     def get(self, request):
-        return Response(get_reviews())
+        # JsonResponse so "not connected" is sent as JSON null rather than an empty body.
+        return JsonResponse(get_reviews(), safe=False)
 
 
 class HealthView(APIView):

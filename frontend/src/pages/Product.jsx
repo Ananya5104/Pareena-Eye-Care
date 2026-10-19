@@ -1,13 +1,21 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import LensPanel from '../components/LensPanel'
-import { Badge, ProductImage, SectionHeading } from '../components/ui'
-import { findProduct, inr } from '../data/catalog'
+import { Badge, ErrorState, Loading, ProductImage, SectionHeading } from '../components/ui'
+import { inr } from '../data/catalog'
+import { getProduct } from '../lib/api'
+import useAsync from '../lib/useAsync'
 import { STORE } from '../data/store'
 import { useApp } from '../state/AppState'
 import NotFound from './NotFound'
 
-const VIEWS = ['Front', 'Side', 'Angle', 'On face']
+const VIEWS = [['front', 'Front'], ['side', 'Side'], ['angle', 'Angle'], ['on_face', 'On face']]
+
+// The photo for a view, preferring one tagged with the chosen colour.
+function photoFor(product, view, colour) {
+  const forView = product.images.filter((i) => i.view === view)
+  return (forView.find((i) => i.variantId === colour.id) || forView.find((i) => !i.variantId) || forView[0] || {}).src
+}
 
 function SizeDiagram({ size }) {
   const [lens, bridge, arm] = size.split('-')
@@ -31,20 +39,23 @@ function SizeDiagram({ size }) {
 
 export default function Product() {
   const { id } = useParams()
-  const product = findProduct(id)
+  const { data: product, error, reload } = useAsync(() => getProduct(id), [id])
   const [view, setView] = useState(0)
   const [colourIx, setColourIx] = useState(0)
   const [panel, setPanel] = useState(false)
   const [frameOnly, setFrameOnly] = useState(false)
   const { addToCart } = useApp()
 
-  if (!product) return <NotFound />
-  const colour = product.colours[colourIx]
+  if (error && error.response && error.response.status === 404) return <NotFound />
+  if (error) return <div className="wrap py-16"><ErrorState title="We couldn't load this frame" onRetry={reload} /></div>
+  if (!product) return <Loading>Loading frame</Loading>
+  const colour = product.colours[colourIx] || product.colours[0] || { id: null, name: 'Standard', hex: '#9aa5b8', stock: 0 }
+  const soldOut = !colour.stock
   const [lens, bridge, arm] = product.size.split('-')
   const isSun = product.type === 'sun'
 
   const buyFrameOnly = () => {
-    addToCart({ productId: product.id, colour: colour.name, lensId: null, rxId: null })
+    addToCart({ product, colour, lens: null })
     setFrameOnly(true)
   }
 
@@ -56,12 +67,17 @@ export default function Product() {
         </p>
         <div className="grid items-start gap-6 md:grid-cols-[1.2fr_1fr] md:gap-14">
           <section aria-label="Photos" className="-mx-4 grid gap-3 md:mx-0">
-            <ProductImage src={product.images && product.images[view]} alt={`${product.name}, ${VIEWS[view]} view`} caption={`${VIEWS[view]} view, photo coming soon`} ratio="aspect-square md:aspect-[4/3]" className="rounded-none md:rounded-md" />
+            <ProductImage src={photoFor(product, VIEWS[view][0], colour)} alt={`${product.name}, ${VIEWS[view][1]} view`} caption={`${VIEWS[view][1]} view, photo coming soon`} ratio="aspect-square md:aspect-[4/3]" className="rounded-none md:rounded-md" />
             <div className="grid grid-cols-4 gap-2 px-4 md:gap-3 md:px-0">
-              {VIEWS.map((v, i) => (
-                <button key={v} type="button" aria-label={`Show ${v} view`} aria-pressed={i === view} onClick={() => setView(i)}
-                  className={`aspect-[4/3] rounded-md bg-soft text-[13px] font-medium text-muted ${i === view ? 'border-2 border-navy' : 'border border-line'}`}>{v}</button>
-              ))}
+              {VIEWS.map(([key, v], i) => {
+                const src = photoFor(product, key, colour)
+                return (
+                  <button key={key} type="button" aria-label={`Show ${v} view`} aria-pressed={i === view} onClick={() => setView(i)}
+                    className={`aspect-[4/3] overflow-hidden rounded-md bg-soft text-[13px] font-medium text-muted ${i === view ? 'border-2 border-navy' : 'border border-line'}`}>
+                    {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : v}
+                  </button>
+                )
+              })}
             </div>
           </section>
 
@@ -73,7 +89,7 @@ export default function Product() {
             </div>
 
             <div className="grid gap-2.5">
-              <p className="field-label">Colour: <span className="font-normal">{colour.name}</span></p>
+              <p className="field-label">Colour: <span className="font-normal">{colour.name}</span>{soldOut ? <span className="font-normal text-warning"> · Out of stock</span> : colour.stock <= 2 ? <span className="font-normal text-warning"> · Only {colour.stock} left</span> : null}</p>
               <div className="flex gap-2.5">
                 {product.colours.map((c, i) => (
                   <button key={c.name} type="button" aria-label={c.name} aria-pressed={i === colourIx} onClick={() => setColourIx(i)}
@@ -112,9 +128,9 @@ export default function Product() {
             )}
 
             <div className="hidden gap-2.5 md:grid">
-              {!isSun && <button type="button" className="btn btn-primary btn-lg w-full" onClick={() => setPanel(true)}>Select lenses</button>}
+              {!isSun && <button type="button" className="btn btn-primary btn-lg w-full" onClick={() => setPanel(true)} disabled={soldOut}>Select lenses</button>}
               <div className="grid grid-cols-2 gap-2.5">
-                <button type="button" className={`btn ${isSun ? 'btn-primary' : 'btn-ghost'}`} onClick={buyFrameOnly}>{isSun ? 'Add to cart' : 'Buy frame only'}</button>
+                <button type="button" className={`btn ${isSun ? 'btn-primary' : 'btn-ghost'}`} onClick={buyFrameOnly} disabled={soldOut}>{isSun ? 'Add to cart' : 'Buy frame only'}</button>
                 <Link to="/book" className="btn btn-ghost">Try it at the store</Link>
               </div>
               {frameOnly && <p className="text-sm text-success" role="status">Added to your cart. <Link to="/cart">Go to cart</Link></p>}
@@ -128,7 +144,7 @@ export default function Product() {
           <div className="grid gap-5">
             <p className="text-[17px] leading-7 md:text-lg">{product.description || '[A short description from the shop: who it suits, how it feels to wear.]'}</p>
             <dl className="grid grid-cols-[110px_minmax(0,1fr)] border-t border-line md:grid-cols-[180px_minmax(0,1fr)]">
-              {[['Material', product.material], ['Rim', product.rim], ['Weight', product.weight], ['Hinges', product.hinges], ['For', product.gender]].map(([k, v]) => (
+              {[['Material', product.material], ['Rim', product.rim], ['Weight', product.weight], ['Hinges', product.hinges], ['For', product.gender]].filter(([, v]) => v).map(([k, v]) => (
                 <div key={k} className="contents"><dt className="border-b border-line py-3 text-muted">{k}</dt><dd className="border-b border-line py-3">{v}</dd></div>
               ))}
             </dl>
@@ -139,8 +155,8 @@ export default function Product() {
       <div className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3.5 border-t border-line bg-card px-4 pb-5 pt-3 md:hidden">
         <span className="grid"><span className="help">{isSun ? 'Price' : 'Frame'}</span><span className="num font-semibold">{inr(product.price)}</span></span>
         {isSun
-          ? <button type="button" className="btn btn-primary" onClick={buyFrameOnly}>{frameOnly ? 'Added' : 'Add to cart'}</button>
-          : <button type="button" className="btn btn-primary" onClick={() => setPanel(true)}>Select lenses</button>}
+          ? <button type="button" className="btn btn-primary" onClick={buyFrameOnly} disabled={soldOut}>{soldOut ? 'Out of stock' : frameOnly ? 'Added' : 'Add to cart'}</button>
+          : <button type="button" className="btn btn-primary" onClick={() => setPanel(true)} disabled={soldOut}>{soldOut ? 'Out of stock' : 'Select lenses'}</button>}
       </div>
 
       {panel && <LensPanel product={product} colour={colour} onClose={() => setPanel(false)} />}

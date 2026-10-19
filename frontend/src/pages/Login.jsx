@@ -2,10 +2,10 @@ import { useRef, useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Spinner } from '../components/Icon'
 import { Alert, Field } from '../components/ui'
-import { sendOtp, verifyOtp } from '../lib/api'
+import { errorMessage, requestCode, updateMe, verifyCode } from '../lib/api'
 import { useApp } from '../state/AppState'
 
-const PHONE_RE = /^[6-9]\d{9}$/
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function CodeInput({ value, onChange, invalid }) {
   const refs = useRef([])
@@ -36,95 +36,107 @@ export default function Login() {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const next = params.get('next') || '/account'
-  const [step, setStep] = useState('phone') // phone | code | name
-  const [phone, setPhone] = useState('')
+  const [step, setStep] = useState('email') // email | code | name
+  const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [tries, setTries] = useState(3)
+  const [locked, setLocked] = useState(false)
   const [wait, setWait] = useState(0)
 
-  useEffect(() => { if (user && step === 'phone') navigate(next, { replace: true }) }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (user && step === 'email') navigate(next, { replace: true }) }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!wait) return
     const t = setTimeout(() => setWait((w) => w - 1), 1000)
     return () => clearTimeout(t)
   }, [wait])
 
-  const digits = phone.replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '')
+  const address = email.trim().toLowerCase()
 
   const send = async (e) => {
     e && e.preventDefault()
-    if (!PHONE_RE.test(digits)) { setError(`Mobile numbers have 10 digits${digits ? `. This one has ${digits.length}.` : '.'}`); return }
+    if (!EMAIL_RE.test(address)) { setError('Enter your email address, for example you@example.com.'); return }
     setError(''); setBusy(true)
-    await sendOtp('+91' + digits)
-    setBusy(false); setStep('code'); setCode(''); setTries(3); setWait(30)
+    try {
+      const res = await requestCode(address)
+      setStep('code'); setCode(''); setLocked(false); setWait(res.resend_in || 30)
+    } catch (err) {
+      const data = err.response && err.response.data
+      if (data && data.resend_in) { setStep('code'); setWait(data.resend_in) }
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   const verify = async (e) => {
     e.preventDefault()
     if (code.length < 6) { setError('Enter all 6 digits.'); return }
     setBusy(true)
-    const res = await verifyOtp('+91' + digits, code)
-    setBusy(false)
-    if (!res.ok) {
-      const left = tries - 1
-      setTries(left)
-      setError(left > 0 ? `That code doesn't match. Check the latest text from us, or get a new code. ${left} ${left === 1 ? 'try' : 'tries'} left.` : 'Too many tries. Get a new code to continue.')
-      return
+    try {
+      const res = await verifyCode(address, code)
+      setError('')
+      if (res.isNew || !res.user.name) { signIn(res.user); setStep('name') } else { signIn(res.user); navigate(next) }
+    } catch (err) {
+      const data = err.response && err.response.data
+      if (data && data.tries_left === 0) setLocked(true)
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
     }
-    setError('')
-    if (res.user.name) { signIn(res.user); navigate(next) } else setStep('name')
   }
 
-  const finish = (e) => {
+  const finish = async (e) => {
     e.preventDefault()
     if (!name.trim()) { setError('Enter your name.'); return }
-    signIn({ phone: '+91 ' + digits, name: name.trim() })
-    navigate(next)
+    setBusy(true)
+    try {
+      signIn(await updateMe({ name: name.trim(), ...(phone.trim() ? { phone: phone.trim() } : {}) }))
+      navigate(next)
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <div className="wrap grid max-w-[1080px] items-start gap-10 pb-24 pt-8 md:grid-cols-2 md:gap-16 md:pt-[72px]">
       <section className="grid gap-5 md:card md:p-9">
-        {step === 'phone' && (
+        {step === 'email' && (
           <form onSubmit={send} noValidate className="grid gap-5">
             <div className="grid gap-2">
               <h1 className="display text-4xl leading-9 md:text-[44px] md:leading-[44px]">Sign in or create an account</h1>
-              <p className="text-muted">One step for both. We'll text you a 6-digit code.</p>
+              <p className="text-muted">One step for both. We'll email you a 6-digit code.</p>
             </div>
-            <Field label="Mobile number" error={error}>
-              {(a) => (
-                <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-2">
-                  <input className="input num" aria-label="Country code" value="+91" disabled />
-                  <input {...a} className="input num" type="tel" autoComplete="tel-national" placeholder="98450 12345" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                </div>
-              )}
+            <Field label="Email" error={error}>
+              {(a) => <input {...a} className="input" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} />}
             </Field>
             <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? <><Spinner />Sending code</> : 'Send code'}</button>
-            <p className="help">New here? Entering your number creates your account. We only message you about your orders and appointments.</p>
+            <p className="help">New here? Entering your email creates your account. We only email you about your orders and appointments.</p>
           </form>
         )}
         {step === 'code' && (
           <form onSubmit={verify} noValidate className="grid gap-5">
             <div className="grid gap-2">
               <h1 className="display text-4xl leading-9">Enter the code</h1>
-              <p className="text-muted">Sent to <span className="num">+91 {digits}</span>. <button type="button" className="text-link underline" onClick={() => { setStep('phone'); setError('') }}>Change</button></p>
+              <p className="text-muted">Sent to <strong>{address}</strong>. <button type="button" className="text-link underline" onClick={() => { setStep('email'); setError('') }}>Change</button></p>
             </div>
             <CodeInput value={code} onChange={setCode} invalid={Boolean(error)} />
             {error && <span className="field-error" role="alert">{error}</span>}
-            {tries > 0 && <button type="submit" className="btn btn-primary w-full" disabled={busy || code.length < 6}>{busy ? <><Spinner />Checking</> : 'Verify'}</button>}
-            {wait > 0 ? <p className="help num">Didn't get it? Resend in 0:{String(wait).padStart(2, '0')}</p> : <button type="button" className="btn btn-secondary w-full" onClick={() => send()}>Send a new code</button>}
-            <p className="help">Testing without a backend? The sample code is 123456.</p>
+            {!locked && <button type="submit" className="btn btn-primary w-full" disabled={busy || code.length < 6}>{busy ? <><Spinner />Checking</> : 'Verify'}</button>}
+            {wait > 0 ? <p className="help num">Didn't get it? Check your spam folder, or resend in 0:{String(wait).padStart(2, '0')}</p> : <button type="button" className="btn btn-secondary w-full" onClick={() => send()} disabled={busy}>Send a new code</button>}
           </form>
         )}
         {step === 'name' && (
           <form onSubmit={finish} noValidate className="grid gap-5">
-            <Alert tone="ok" title="Number verified" role="status" />
+            <Alert tone="ok" title="Email verified" role="status" />
             <h1 className="display text-4xl leading-9">Welcome. What's your name?</h1>
             <Field label="Full name" error={error}>{(a) => <input {...a} className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />}</Field>
-            <button type="submit" className="btn btn-primary w-full">Create my account</button>
+            <Field label="Mobile number" optional help="Fills in your bookings and orders for you.">{(a) => <input {...a} className="input num" type="tel" autoComplete="tel" placeholder="98450 12345" value={phone} onChange={(e) => setPhone(e.target.value)} />}</Field>
+            <button type="submit" className="btn btn-primary w-full" disabled={busy}>{busy ? <><Spinner />Saving</> : 'Create my account'}</button>
           </form>
         )}
       </section>

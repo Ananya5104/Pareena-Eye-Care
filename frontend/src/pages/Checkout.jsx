@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import Icon, { Spinner } from '../components/Icon'
 import { Alert, Field, ProductImage } from '../components/ui'
-import { createOrder, payOnline } from '../lib/api'
+import { createOrder, errorMessage, getClinic, payOnline } from '../lib/api'
+import useAsync from '../lib/useAsync'
 import { inr } from '../data/catalog'
 import { STORE } from '../data/store'
 import { useApp } from '../state/AppState'
@@ -14,13 +15,15 @@ function Radio({ on }) {
 }
 
 export default function Checkout() {
-  const { cartLines, cartTotal, user, addOrder, clearCart } = useApp()
+  const { cartLines, cartTotal, user, addOrderRef, clearCart } = useApp()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: user ? user.name : '', phone: user ? user.phone : '', email: '' })
+  const { data: clinic } = useAsync(getClinic, [])
+  const onlineOk = Boolean(clinic && clinic.online_payments_available)
+  const [form, setForm] = useState({ name: user ? user.name : '', phone: user ? user.phone : '', email: user ? user.email : '' })
   const [pay, setPay] = useState(null)
   const [errors, setErrors] = useState({})
   const [stage, setStage] = useState('form') // form | saving | paying
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState('')
 
   if (!cartLines.length && stage === 'form') return <Navigate to="/cart" replace />
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
@@ -33,25 +36,20 @@ export default function Checkout() {
     if (!pay) er.pay = "Choose how you'd like to pay."
     setErrors(er)
     if (Object.keys(er).length) return
-    setFailed(false)
+    setFailed('')
     try {
       setStage('saving')
-      const items = cartLines.map((l) => ({ productId: l.product.id, name: l.product.name, colour: l.colour, lens: l.lens ? l.lens.name : null, rx: l.rx ? l.rx.name : null, total: l.total }))
-      const order = await createOrder({ ...form, items, total: cartTotal, payment: pay })
+      const { order, payment } = await createOrder(form, cartLines, pay)
+      // The order exists now (stock is held), so the cart is done either way.
+      addOrderRef(order.id)
+      clearCart()
       if (pay === 'online') {
         setStage('paying')
-        const res = await payOnline(order)
-        const saved = { ...order, status: res.ok ? 'paid' : 'failed' }
-        addOrder(saved)
-        if (res.ok) clearCart()
-        navigate(`/order/${order.id}`)
-      } else {
-        addOrder({ ...order, status: 'store' })
-        clearCart()
-        navigate(`/order/${order.id}`)
+        await payOnline(order, payment)
       }
-    } catch {
-      setFailed(true)
+      navigate(`/order/${order.id}`)
+    } catch (err) {
+      setFailed(errorMessage(err))
       setStage('form')
     }
   }
@@ -78,7 +76,7 @@ export default function Checkout() {
       <form onSubmit={submit} noValidate className="grid items-start gap-8 md:grid-cols-[1.5fr_1fr] md:gap-10">
         <div className="grid gap-8 md:card md:p-8">
           {errCount > 0 && <Alert tone="bad" title={`${errCount} ${errCount === 1 ? 'thing' : 'things'} to fix`}>Then try again.</Alert>}
-          {failed && <Alert tone="bad" title="We couldn't place your order">The connection dropped and you have not been charged. Try again.</Alert>}
+          {failed && <Alert tone="bad" title="We couldn't place your order">{failed} You have not been charged.</Alert>}
 
           <section className="grid gap-4">
             <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -87,7 +85,7 @@ export default function Checkout() {
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Full name" error={errors.name}>{(a) => <input {...a} className="input" autoComplete="name" value={form.name} onChange={set('name')} disabled={busy} />}</Field>
-              <Field label="Mobile number" error={errors.phone} help="For order updates on WhatsApp.">{(a) => <input {...a} className="input num" type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} disabled={busy} />}</Field>
+              <Field label="Mobile number" error={errors.phone} help="So we can tell you when your glasses are ready.">{(a) => <input {...a} className="input num" type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} disabled={busy} />}</Field>
               <Field label="Email" optional="optional, for the receipt" className="sm:col-span-2">{(a) => <input {...a} className="input" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} onChange={set('email')} disabled={busy} />}</Field>
             </div>
           </section>
@@ -103,8 +101,8 @@ export default function Checkout() {
           <section className="grid gap-3 border-t border-line pt-7">
             <h2 className="display text-xl md:text-2xl">3. How would you like to pay?</h2>
             <div role="radiogroup" aria-label="Payment" className={`grid gap-3 sm:grid-cols-2 ${errors.pay ? 'rounded-md border-[1.5px] border-danger p-2' : ''}`}>
-              {[['online', 'Pay online', 'UPI, cards or net banking. Your order goes straight to the lab.'], ['store', 'Pay at store', 'Pay when you collect. Cash, UPI or card.']].map(([v, t, d]) => (
-                <button key={v} type="button" role="radio" aria-checked={pay === v} className="choice gap-1.5" onClick={() => setPay(v)} disabled={busy}>
+              {[['online', 'Pay online', onlineOk ? 'UPI, cards or net banking. Your order goes straight to the lab.' : 'Not available right now. Please pay at the store.'], ['store', 'Pay at store', 'Pay when you collect. Cash, UPI or card.']].map(([v, t, d]) => (
+                <button key={v} type="button" role="radio" aria-checked={pay === v} className="choice gap-1.5" onClick={() => setPay(v)} disabled={busy || (v === 'online' && !onlineOk)}>
                   <span className="flex items-center justify-between"><strong className="text-[17px]">{t}</strong><Radio on={pay === v} /></span>
                   <span className="help">{d}</span>
                 </button>
@@ -126,7 +124,7 @@ export default function Checkout() {
           <h2 className="display text-xl md:text-2xl">Order summary</h2>
           {cartLines.map((l) => (
             <div key={l.id} className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-3">
-              <ProductImage ratio="h-12" />
+              <ProductImage src={l.product.image} ratio="h-12" />
               <span className="grid min-w-0"><strong className="truncate">{l.product.name}</strong><span className="help">{l.colour} · {l.lens ? l.lens.name : 'frame only'}</span></span>
               <span className="num">{inr(l.total)}</span>
             </div>

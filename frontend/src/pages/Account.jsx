@@ -1,11 +1,31 @@
 import { useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { Badge, EmptyState } from '../components/ui'
+import { Badge, EmptyState, ErrorState, Loading } from '../components/ui'
 import { ConsultationCard } from './Consultations'
 import { hasAdd, useApp } from '../state/AppState'
 import { inr } from '../data/catalog'
+import { getMyAppointments, getMyConsultations, getMyOrders, getMyPrescriptions, getOrder, lookupConsultations } from '../lib/api'
+import useAsync from '../lib/useAsync'
+
+const byId = (list) => [...new Map(list.map((x) => [x.id, x])).values()]
+
+// Records on the account, plus anything done as a guest on this device before signing in.
+async function loadRecords({ orderRefs, appointments, prescriptions, consultationRefs }) {
+  const [orders, appts, rxs, consults] = await Promise.all([getMyOrders(), getMyAppointments(), getMyPrescriptions(), getMyConsultations()])
+  const known = new Set(orders.map((o) => o.id))
+  const guestOrders = await Promise.all(orderRefs.filter((r) => !known.has(r)).map((r) => getOrder(r).catch(() => null)))
+  const knownC = new Set(consults.map((c) => c.id))
+  const guestConsults = await lookupConsultations(consultationRefs.filter((r) => !knownC.has(r)))
+  return {
+    orders: [...orders, ...guestOrders.filter(Boolean)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    appointments: byId([...appts, ...appointments]),
+    prescriptions: byId([...rxs, ...prescriptions]),
+    consultations: [...consults, ...guestConsults],
+  }
+}
 
 const ORDER_BADGE = { paid: ['ok', 'Paid'], store: ['pending', 'Pay at store'], failed: ['bad', 'Payment failed'] }
+const PROGRESS_TONE = { placed: 'neutral', confirmed: 'info', in_progress: 'info', ready: 'ok', completed: 'neutral', cancelled: 'bad' }
 
 function RxTable({ rx }) {
   return (
@@ -21,16 +41,21 @@ function RxTable({ rx }) {
 }
 
 export default function Account() {
-  const { user, signOut, orders, appointments, prescriptions, consultations, setActiveRx } = useApp()
+  const app = useApp()
+  const { user, signOut, setActiveRx } = app
   const [tab, setTab] = useState('orders')
+  const { data, error, reload } = useAsync(() => (user ? loadRecords(app) : null), [user && user.id])
   if (!user) return <Navigate to="/login?next=/account" replace />
+  if (error) return <div className="wrap py-16"><ErrorState title="We couldn't load your account" onRetry={reload} /></div>
+  if (!data) return <Loading>Loading your account</Loading>
+  const { orders, appointments, prescriptions, consultations } = data
 
   const TABS = [['orders', 'Orders', orders.length], ['appts', 'Appointments', appointments.length], ['rx', 'Prescriptions', prescriptions.length], ['consults', 'Video consultations', consultations.length]]
 
   return (
     <div className="wrap grid gap-7 pb-24 pt-8 md:gap-8 md:pt-12">
       <div className="flex flex-wrap items-end justify-between gap-6">
-        <div className="grid gap-1.5"><h1 className="display text-[36px] leading-9 md:text-[56px] md:leading-[54px]">Hello, {user.name.split(' ')[0]}</h1><p className="num text-muted">{user.phone}</p></div>
+        <div className="grid gap-1.5"><h1 className="display text-[36px] leading-9 md:text-[56px] md:leading-[54px]">Hello{user.name ? `, ${user.name.split(' ')[0]}` : ''}</h1><p className="num text-muted">{[user.email, user.phone].filter(Boolean).join(' · ')}</p></div>
         <button type="button" className="btn-text p-0 text-muted" onClick={signOut}>Sign out</button>
       </div>
 
@@ -55,7 +80,7 @@ export default function Account() {
                 return (
                   <article key={o.id} className="card grid gap-2 p-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center md:gap-5 md:px-6 md:py-5">
                     <div className="grid gap-1">
-                      <div className="flex flex-wrap items-center gap-2.5"><strong>{o.id}</strong>{o.status !== 'failed' && <Badge tone="info">In the lab</Badge>}<Badge tone={tone}>{label}</Badge></div>
+                      <div className="flex flex-wrap items-center gap-2.5"><strong>{o.number}</strong><Badge tone={PROGRESS_TONE[o.progress] || 'info'}>{o.progressLabel}</Badge>{o.progress !== 'cancelled' && <Badge tone={tone}>{label}</Badge>}</div>
                       <span className="text-muted">{o.items.map((i) => i.name + (i.lens ? ` with ${i.lens}` : '')).join(', ')}</span>
                       <span className="help">Placed {new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                     </div>
@@ -74,7 +99,7 @@ export default function Account() {
               {appointments.length === 0 ? (
                 <EmptyState icon="calendar" title="No appointments yet" action={<Link className="btn btn-primary" to="/book">Book an eye test</Link>}>Eye tests you book show up here.</EmptyState>
               ) : appointments.map((a) => {
-                const d = new Date(a.date)
+                const d = new Date(`${a.date}T00:00`)
                 const past = d < new Date(new Date().toDateString())
                 return (
                   <article key={a.id} className={`card grid grid-cols-[64px_minmax(0,1fr)] items-center gap-4 p-4 md:grid-cols-[80px_minmax(0,1fr)_auto] md:px-6 md:py-5 ${past ? '' : 'border-2 border-navy'}`}>
@@ -98,7 +123,7 @@ export default function Account() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   {prescriptions.map((p) => (
                     <article key={p.id} className="card grid gap-2.5 p-5">
-                      <div className="flex justify-between gap-3"><strong>{p.name}</strong><span className="help">{p.date}</span></div>
+                      <div className="flex justify-between gap-3"><strong>{p.name}</strong>{p.date && <span className="help">{p.date}</span>}</div>
                       <RxTable rx={p} />
                       {!hasAdd(p) && <p className="help">No ADD, so progressive lenses aren't available with this one.</p>}
                       <Link className="text-sm" to="/shop" onClick={() => setActiveRx(p.id)}>Shop with this prescription</Link>

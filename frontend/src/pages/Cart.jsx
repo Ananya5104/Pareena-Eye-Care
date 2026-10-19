@@ -28,7 +28,7 @@ export default function Cart() {
                   <dl className="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm">
                     <dt className="text-muted">Colour</dt><dd>{l.colour}</dd>
                     <dt className="text-muted">Lenses</dt><dd>{l.lens ? l.lens.name : l.product.type === 'sun' ? 'Sun lenses, no power' : 'Frame only'}</dd>
-                    {l.lens && <><dt className="text-muted">Prescription</dt><dd>{l.rx ? `${l.rx.name}, ${l.rx.date}` : 'Plain, no power'}</dd></>}
+                    {l.lens && <><dt className="text-muted">Prescription</dt><dd>{l.rx ? [l.rx.name, l.rx.date].filter(Boolean).join(', ') : 'Plain, no power'}</dd></>}
                   </dl>
                   <div className="mt-1.5 flex items-center justify-between gap-5 md:justify-start">
                     <span className="num font-semibold md:hidden">{inr(l.total)}</span>

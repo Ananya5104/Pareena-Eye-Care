@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import Icon from './Icon'
-import { Alert, ProductImage } from './ui'
-import { LENSES, inr } from '../data/catalog'
+import { Alert, ErrorState, Loading, ProductImage } from './ui'
+import { inr } from '../data/catalog'
+import { getLenses } from '../lib/api'
+import useAsync from '../lib/useAsync'
 import { hasAdd, useApp } from '../state/AppState'
 
 function rxSummary(rx) {
@@ -11,10 +13,16 @@ function rxSummary(rx) {
   return `R ${eye(rx.right)} · L ${eye(rx.left)}${hasAdd(rx) ? ` · ADD ${rx.right.add || rx.left.add}` : ' · no ADD'}`
 }
 
+const sphValue = (s) => Number(String(s || '0').replace('−', '-'))
+
 function unavailableReason(lens, product, rx, noPower) {
   if (noPower && !lens.worksWithoutPower) return 'Needs a prescription power.'
   if (lens.needsAdd && !product.progressive) return 'This frame is too small for progressive lenses.'
+  if (!product.lensTypeIds.includes(lens.dbId)) return "This frame can't take this lens."
+  if (noPower) return null
   if (lens.needsAdd && !hasAdd(rx)) return 'Needs an ADD value. Your prescription has none.'
+  const outOfRange = [rx.right.sph, rx.left.sph].map(sphValue).some((v) => (product.minSph !== null && v < product.minSph) || (product.maxSph !== null && v > product.maxSph))
+  if (outOfRange) return `Your power is outside this frame's range (${product.powerRange}).`
   return null
 }
 
@@ -25,6 +33,7 @@ export default function LensPanel({ product, colour, onClose }) {
   const [lensId, setLensId] = useState(null)
   const [added, setAdded] = useState(false)
   const closeRef = useRef(null)
+  const { data: lenses, error, reload } = useAsync(getLenses, [])
 
   useEffect(() => {
     closeRef.current && closeRef.current.focus()
@@ -36,13 +45,13 @@ export default function LensPanel({ product, colour, onClose }) {
   }, [onClose])
 
   const needsRx = !activeRx && !noPower
-  const options = LENSES.map((l) => ({ ...l, reason: unavailableReason(l, product, activeRx, noPower) }))
+  const options = (lenses || []).map((l) => ({ ...l, reason: unavailableReason(l, product, activeRx, noPower) }))
   const firstOk = options.find((o) => !o.reason)
   const chosen = options.find((o) => o.id === lensId && !o.reason) || firstOk
   const total = product.price + (chosen ? chosen.price : 0)
 
   const add = () => {
-    addToCart({ productId: product.id, colour: colour.name, lensId: chosen ? chosen.id : null, rxId: activeRx ? activeRx.id : null })
+    addToCart({ product, colour, lens: chosen || null, rxId: !noPower && activeRx ? activeRx.id : null })
     setAdded(true)
   }
 
@@ -68,10 +77,10 @@ export default function LensPanel({ product, colour, onClose }) {
           <div className="grid gap-4 overflow-auto p-4 md:p-7">
             <Alert tone="ok" title="Added to your cart" role="status" />
             <div className="grid grid-cols-[88px_minmax(0,1fr)] items-center gap-3.5">
-              <ProductImage ratio="h-[66px]" />
+              <ProductImage src={product.image} ratio="h-[66px]" />
               <div className="grid gap-0.5">
                 <strong>{product.name}, {colour.name}</strong>
-                <span className="help">{chosen ? chosen.name : 'Frame only'}{activeRx ? ` · ${activeRx.name}'s prescription` : ''}</span>
+                <span className="help">{chosen ? chosen.name : 'Frame only'}{activeRx && !noPower ? ` · ${activeRx.name}'s prescription` : noPower ? ' · no power' : ''}</span>
                 <span className="num font-semibold">{inr(total)}</span>
               </div>
             </div>
@@ -87,7 +96,7 @@ export default function LensPanel({ product, colour, onClose }) {
                 {prescriptions.map((p) => (
                   <button key={p.id} type="button" className="choice" onClick={() => setActiveRx(p.id)}>
                     <strong>{p.name}</strong>
-                    <span className="help num">{p.date} · {rxSummary(p)}</span>
+                    <span className="help num">{p.date ? `${p.date} · ` : ''}{rxSummary(p)}</span>
                   </button>
                 ))}
               </div>
@@ -104,14 +113,16 @@ export default function LensPanel({ product, colour, onClose }) {
               <div className="flex items-center justify-between gap-3 rounded-md bg-soft px-3.5 py-3">
                 <div className="grid gap-0.5 text-sm">
                   <span className="text-muted">{noPower ? 'Lenses' : 'Using prescription'}</span>
-                  <strong className="text-base">{noPower ? 'Plain, no power' : `${activeRx.name} · ${activeRx.date}`}</strong>
+                  <strong className="text-base">{noPower ? 'Plain, no power' : [activeRx.name, activeRx.date].filter(Boolean).join(' · ')}</strong>
                   {!noPower && <span className="num text-muted">{rxSummary(activeRx)}</span>}
                 </div>
                 {noPower
                   ? <button type="button" className="btn-text p-0 text-sm" onClick={() => setNoPower(false)}>Add power</button>
                   : <Link to={`/prescription?next=/shop/${product.id}`} className="text-sm">Change</Link>}
               </div>
-              <fieldset className="grid gap-2.5">
+              {error && <ErrorState title="We couldn't load the lens options" onRetry={reload} />}
+              {!lenses && !error && <Loading className="py-8">Loading lens options</Loading>}
+              {lenses && <fieldset className="grid gap-2.5">
                 <legend className="field-label pb-2.5">Lens type</legend>
                 {options.map((l) => {
                   const on = chosen && chosen.id === l.id
@@ -132,7 +143,7 @@ export default function LensPanel({ product, colour, onClose }) {
                     </label>
                   )
                 })}
-              </fieldset>
+              </fieldset>}
               <Link to="/lens-guide" className="text-sm">Not sure? Compare lenses in the lens guide</Link>
             </div>
             <div className="grid gap-3 border-t border-line bg-card px-4 pb-5 pt-3 md:px-7 md:pb-6 md:pt-4">

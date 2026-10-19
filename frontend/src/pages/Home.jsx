@@ -3,6 +3,8 @@ import Icon from '../components/Icon'
 import { EyeChart, SectionHeading } from '../components/ui'
 import GoogleReviews from '../components/GoogleReviews'
 import { STORE } from '../data/store'
+import { getBrands } from '../lib/api'
+import useAsync from '../lib/useAsync'
 
 const CHART = [
   { acuity: '6/60', text: 'P', size: 84 },
@@ -28,6 +30,7 @@ const WHY = [
 ]
 
 export default function Home() {
+  const { data: brands } = useAsync(getBrands, [])
   return (
     <>
       <section>
@@ -98,9 +101,11 @@ export default function Home() {
           </div>
           <div className="grid gap-4 pt-4">
             <p className="label">Brands we stock</p>
-            <div className="grid grid-cols-3 overflow-hidden rounded-md border border-line bg-card md:grid-cols-6">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="grid h-16 place-items-center border-b border-r border-line text-sm text-muted md:h-[88px] md:border-b-0">[Brand logo]</div>
+            <div className="grid grid-cols-3 overflow-hidden rounded-md border border-line bg-card md:grid-cols-7">
+              {(brands || Array.from({ length: 7 }, (_, i) => ({ id: i, name: '' }))).map((b) => (
+                <Link key={b.id} to="/shop" className="grid h-16 place-items-center border-b border-r border-line px-2 text-center text-sm font-semibold text-ink no-underline md:h-[88px] md:border-b-0">
+                  {b.logo ? <img src={b.logo} alt={b.name} className="max-h-10 max-w-full object-contain" /> : b.name}
+                </Link>
               ))}
             </div>
           </div>

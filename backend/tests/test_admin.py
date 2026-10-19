@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from apps.appointments.models import Appointment
 from apps.consultations.models import ConsultationRequest
-from apps.orders.models import Order
+from apps.orders.models import Order, Prescription
 
 
 class AdminSmokeTests(TestCase):
@@ -23,8 +23,11 @@ class AdminSmokeTests(TestCase):
             name="A", phone="+919876543210", reason="Test",
             date=timezone.localdate() + datetime.timedelta(days=2), time=datetime.time(10, 0),
         )
-        ConsultationRequest.objects.create(name="C", phone="+919876543210", issue_description="Dry eyes")
+        ConsultationRequest.objects.create(
+            name="C", phone="+919876543210", issues=["dry_eyes"], issue_description="Dry eyes for a week now."
+        )
         Order.objects.create(customer_name="O", phone="+919876543210")
+        Prescription.objects.create(patient_name="P", right_sph=-1, left_sph=-1.25, right_add=1.5)
 
     def setUp(self):
         self.client.force_login(self.user)

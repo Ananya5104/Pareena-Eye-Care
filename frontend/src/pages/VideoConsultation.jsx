@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import Icon, { Spinner } from '../components/Icon'
 import { Alert, Badge, Field, PhotoUpload, Select } from '../components/ui'
-import { createConsultation } from '../lib/api'
+import { ISSUES, ISSUE_LABEL, createConsultation, errorMessage } from '../lib/api'
 import { STORE } from '../data/store'
 import { useApp } from '../state/AppState'
 
-const ISSUES = ['Red eyes', 'Dry eyes', 'Itching', 'Irritation', 'Lens discomfort', 'Something else']
+const SINCE = [['today', 'Today'], ['few_days', '2 to 3 days'], ['week', 'About a week'], ['longer', 'Longer']]
+const EYES = [['both', 'Both'], ['right', 'Right'], ['left', 'Left']]
+const WHEN = [['today_evening', 'Today, evening (5 to 8 pm)'], ['tomorrow_morning', 'Tomorrow, morning'], ['tomorrow_evening', 'Tomorrow, evening'], ['any', 'Any time']]
+const options = (list) => list.map(([v, l]) => <option key={v} value={v}>{l}</option>)
 const PHONE_RE = /^(\+?91)?[6-9]\d{9}$/
 
 export function EmergencyBox() {
@@ -22,13 +25,13 @@ export function EmergencyBox() {
 }
 
 export default function VideoConsultation() {
-  const { user, addConsultation } = useApp()
+  const { user, addConsultationRef } = useApp()
   const [issues, setIssues] = useState([])
-  const [form, setForm] = useState({ since: '2 to 3 days', eye: 'Both', desc: '', name: user ? user.name : '', phone: user ? user.phone : '', email: '', when: 'Today, evening (5 to 8 pm)' })
+  const [form, setForm] = useState({ since: 'few_days', eye: 'both', desc: '', name: user ? user.name : '', phone: user ? user.phone : '', email: user ? user.email : '', when: 'today_evening' })
   const [files, setFiles] = useState([])
   const [errors, setErrors] = useState({})
   const [sending, setSending] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState('')
   const [sent, setSent] = useState(null)
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
@@ -41,14 +44,17 @@ export default function VideoConsultation() {
     if (!PHONE_RE.test(form.phone.replace(/[\s-]/g, ''))) er.phone = 'Enter a 10-digit mobile number. We send the call link here.'
     setErrors(er)
     if (Object.keys(er).length) { window.scrollTo({ top: 0 }); return }
-    setSending(true); setFailed(false)
+    setSending(true); setFailed('')
     try {
-      const c = await createConsultation({ ...form, issues, photos: files.map((f) => f.name) })
-      addConsultation(c)
-      setSent(c)
+      const c = await createConsultation(form, issues, files)
+      addConsultationRef(c.reference)
+      setSent({
+        id: c.reference.slice(0, 8).toUpperCase(), phone: form.phone, issues: issues.map((i) => ISSUE_LABEL[i]),
+        when: Object.fromEntries(WHEN)[form.when], photos: files.length,
+      })
       window.scrollTo({ top: 0 })
-    } catch {
-      setFailed(true)
+    } catch (err) {
+      setFailed(errorMessage(err))
     } finally {
       setSending(false)
     }
@@ -66,7 +72,7 @@ export default function VideoConsultation() {
           <dl className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-4 gap-y-3 border-y border-line py-5">
             <dt className="text-muted">Problem</dt><dd>{sent.issues.join(', ')}</dd>
             <dt className="text-muted">Best time</dt><dd>{sent.when}</dd>
-            <dt className="text-muted">Photos</dt><dd>{sent.photos.length ? `${sent.photos.length} attached` : 'None'}</dd>
+            <dt className="text-muted">Photos</dt><dd>{sent.photos ? `${sent.photos} attached` : 'None'}</dd>
             <dt className="text-muted">Request no.</dt><dd className="num">{sent.id}</dd>
           </dl>
           <Link className="btn btn-primary justify-self-start max-md:w-full" to="/consultations">Track this request</Link>
@@ -90,23 +96,23 @@ export default function VideoConsultation() {
           {errCount > 0 && <Alert tone="bad" title={`${errCount} ${errCount === 1 ? 'thing' : 'things'} to fix`}>They're marked below.</Alert>}
           {failed && (
             <Alert tone="bad" title="Your request didn't go through">
-              The connection dropped. Everything you typed is still here. Try again, or <a href={STORE.whatsappHref} target="_blank" rel="noreferrer">send it on WhatsApp instead</a>.
+              {failed} Everything you typed is still here. Try again, or <a href={STORE.whatsappHref} target="_blank" rel="noreferrer">send it on WhatsApp instead</a>.
             </Alert>
           )}
 
           <fieldset className="grid gap-3">
             <legend className="field-label pb-2">What's the problem? <span className="optional">Pick all that apply</span></legend>
             <div className={`grid grid-cols-2 gap-2.5 md:grid-cols-3 ${errors.issues ? 'rounded-md border-[1.5px] border-danger p-2' : ''}`}>
-              {ISSUES.map((i) => (
-                <button key={i} type="button" className="choice min-h-[52px] content-center font-medium" aria-pressed={issues.includes(i)} onClick={() => setIssues(issues.includes(i) ? issues.filter((x) => x !== i) : [...issues, i])}>{i}</button>
+              {ISSUES.map(([i, text]) => (
+                <button key={i} type="button" className="choice min-h-[52px] content-center font-medium" aria-pressed={issues.includes(i)} onClick={() => setIssues(issues.includes(i) ? issues.filter((x) => x !== i) : [...issues, i])}>{text}</button>
               ))}
             </div>
             {errors.issues && <span className="field-error">{errors.issues}</span>}
           </fieldset>
 
           <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Since when?">{(a) => <Select {...a} value={form.since} onChange={set('since')}><option>Today</option><option>2 to 3 days</option><option>About a week</option><option>Longer</option></Select>}</Field>
-            <Field label="Which eye?">{(a) => <Select {...a} value={form.eye} onChange={set('eye')}><option>Both</option><option>Right</option><option>Left</option></Select>}</Field>
+            <Field label="Since when?">{(a) => <Select {...a} value={form.since} onChange={set('since')}>{options(SINCE)}</Select>}</Field>
+            <Field label="Which eye?">{(a) => <Select {...a} value={form.eye} onChange={set('eye')}>{options(EYES)}</Select>}</Field>
           </div>
 
           <Field label="Describe it in your own words" error={errors.desc}>
@@ -127,7 +133,7 @@ export default function VideoConsultation() {
             <Field label="Full name" error={errors.name}>{(a) => <input {...a} className="input" autoComplete="name" value={form.name} onChange={set('name')} />}</Field>
             <Field label="Mobile (WhatsApp)" error={errors.phone}>{(a) => <input {...a} className="input num" type="tel" autoComplete="tel" value={form.phone} onChange={set('phone')} />}</Field>
             <Field label="Email" optional="for the Meet link">{(a) => <input {...a} className="input" type="email" autoComplete="email" value={form.email} onChange={set('email')} />}</Field>
-            <Field label="Best time for a call">{(a) => <Select {...a} value={form.when} onChange={set('when')}><option>Today, evening (5 to 8 pm)</option><option>Tomorrow, morning</option><option>Tomorrow, evening</option><option>Any time</option></Select>}</Field>
+            <Field label="Best time for a call">{(a) => <Select {...a} value={form.when} onChange={set('when')}>{options(WHEN)}</Select>}</Field>
           </div>
 
           <button type="submit" className="btn btn-primary justify-self-start max-md:w-full" disabled={sending} aria-busy={sending}>
@@ -142,7 +148,7 @@ export default function VideoConsultation() {
               {[
                 ['You send this request.', 'It shows as Pending in your account.'],
                 ['Our optometrist reviews it.', `Usually within ${STORE.consultReplyWithin} during opening hours. If it can wait, we approve a time. If it can't, we'll tell you where to go.`],
-                ['You join the call.', 'A "Join Google Meet" button appears in your account and on WhatsApp.'],
+                ['You join the call.', 'A "Join Google Meet" button appears on your consultations page, and we send you the link.'],
               ].map(([t, d], i) => (
                 <li key={t} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3 border-b border-line py-3.5">
                   <span className="display text-2xl leading-[26px] text-sky">{i + 1}</span>

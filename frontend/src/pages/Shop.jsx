@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../components/Icon'
 import ProductCard from '../components/ProductCard'
-import { Alert, EmptyState, Select } from '../components/ui'
-import { BRANDS, GENDERS, PRICE_RANGES, PRODUCTS, SHAPES } from '../data/catalog'
+import { Alert, EmptyState, ErrorState, Loading, Select } from '../components/ui'
+import { GENDERS, PRICE_RANGES, SHAPES } from '../data/catalog'
+import { getProducts } from '../lib/api'
+import useAsync from '../lib/useAsync'
 import { useApp } from '../state/AppState'
 
 const PAGE = 9
@@ -15,7 +17,7 @@ const SORTS = {
 
 function toggle(list, v) { return list.includes(v) ? list.filter((x) => x !== v) : [...list, v] }
 
-function Filters({ f, setF, idPrefix }) {
+function Filters({ f, setF, idPrefix, brands }) {
   return (
     <div className="grid">
       <fieldset className="grid gap-1 border-t border-line py-4">
@@ -34,7 +36,7 @@ function Filters({ f, setF, idPrefix }) {
       </fieldset>
       <fieldset className="grid gap-1 border-t border-line py-4">
         <legend className="field-label float-left w-full pb-2">Brand</legend>
-        {BRANDS.map((b) => (
+        {brands.map((b) => (
           <label key={b} className="check"><input type="checkbox" checked={f.brands.includes(b)} onChange={() => setF({ ...f, brands: toggle(f.brands, b) })} />{b}</label>
         ))}
       </fieldset>
@@ -58,6 +60,9 @@ export default function Shop() {
   const [shown, setShown] = useState(PAGE)
   const [sheet, setSheet] = useState(false)
   const { activeRx, noPower } = useApp()
+  const { data: products, error, reload } = useAsync(() => getProducts(type), [type])
+  const all = useMemo(() => products || [], [products])
+  const brands = useMemo(() => [...new Set(all.map((p) => p.brand))].sort(), [all])
 
   useEffect(() => setShown(PAGE), [f, type, sort])
   useEffect(() => {
@@ -71,12 +76,11 @@ export default function Shop() {
 
   const items = useMemo(() => {
     const price = PRICE_RANGES.find((p) => p.id === f.price).test
-    return PRODUCTS.filter((p) => p.type === type
-      && (!f.genders.length || f.genders.includes(p.gender) || (p.gender === 'Unisex' && !f.genders.includes('Kids')))
+    return all.filter((p) => (!f.genders.length || f.genders.includes(p.gender) || (p.gender === 'Unisex' && !f.genders.includes('Kids')))
       && (!f.shapes.length || f.shapes.includes(p.shape))
       && (!f.brands.length || f.brands.includes(p.brand))
       && price(p.price)).sort(SORTS[sort].fn)
-  }, [f, type, sort])
+  }, [all, f, sort])
 
   const active = [
     ...f.genders.map((v) => ({ name: v, remove: () => setF({ ...f, genders: toggle(f.genders, v) }) })),
@@ -123,12 +127,12 @@ export default function Shop() {
             <h2 className="display text-xl">Filters</h2>
             <button type="button" className="btn-text p-0 text-[15px]" onClick={() => setF(NONE)}>Clear all</button>
           </div>
-          <Filters f={f} setF={setF} idPrefix="side" />
+          <Filters f={f} setF={setF} idPrefix="side" brands={brands} />
         </aside>
 
         <section aria-label="Frames" className="grid min-w-0 gap-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="text-muted"><strong className="text-ink">{items.length}</strong> {items.length === 1 ? 'frame' : 'frames'}</p>
+            <p className="text-muted">{products && <><strong className="text-ink">{items.length}</strong> {items.length === 1 ? 'frame' : 'frames'}</>}</p>
             <div className="hidden items-center gap-2.5 md:flex">
               <label htmlFor="sort" className="text-sm text-muted">Sort by</label>
               <div className="w-[200px]">
@@ -148,7 +152,11 @@ export default function Shop() {
             </div>
           )}
 
-          {items.length > 0 ? (
+          {error ? (
+            <ErrorState title="We couldn't load the frames" onRetry={reload} />
+          ) : !products ? (
+            <Loading>Loading frames</Loading>
+          ) : items.length > 0 ? (
             <>
               <div className="grid grid-cols-2 gap-x-3 gap-y-7 lg:grid-cols-3 lg:gap-x-6 lg:gap-y-10">
                 {items.slice(0, shown).map((p) => <ProductCard key={p.id} product={p} />)}
@@ -176,7 +184,7 @@ export default function Shop() {
               <h2 className="display text-xl">Filters</h2>
               <button type="button" className="icon-btn" aria-label="Close filters" onClick={() => setSheet(false)}><Icon name="close" /></button>
             </div>
-            <div className="flex-1 overflow-auto px-4"><Filters f={f} setF={setF} idPrefix="sheet" /></div>
+            <div className="flex-1 overflow-auto px-4"><Filters f={f} setF={setF} idPrefix="sheet" brands={brands} /></div>
             <div className="grid grid-cols-[1fr_2fr] gap-2.5 border-t border-line px-4 pb-5 pt-3">
               <button type="button" className="btn btn-ghost" onClick={() => setF(NONE)}>Clear all</button>
               <button type="button" className="btn btn-primary" onClick={() => setSheet(false)}>Show {items.length} {items.length === 1 ? 'frame' : 'frames'}</button>

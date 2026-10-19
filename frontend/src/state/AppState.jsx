@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { findLens, findProduct } from '../data/catalog'
+import { getMe, hasTokens, setTokens } from '../lib/api'
 
-// Cart, prescriptions, signed-in user, and the customer's own orders, bookings and
-// consultations. Saved in the browser for now; move to the backend later.
+// Cart, prescriptions, signed-in user, and references to the customer's own orders,
+// bookings and consultations, kept in the browser. The backend holds the real records;
+// these references let guests find them again.
 
 const AppState = createContext(null)
-const KEY = 'pareena-state-v1'
+const KEY = 'pareena-state-v2'
 
-const empty = { cart: [], prescriptions: [], activeRxId: null, noPower: false, user: null, orders: [], appointments: [], consultations: [] }
+const empty = { cart: [], prescriptions: [], activeRxId: null, noPower: false, user: null, orderRefs: [], appointments: [], consultationRefs: [] }
 
 function load() {
   try {
@@ -28,50 +29,61 @@ export function AppStateProvider({ children }) {
     try { window.localStorage.setItem(KEY, JSON.stringify(state)) } catch { /* storage full or blocked */ }
   }, [state])
 
+  // Refresh the signed-in user on load; drop it if the session has expired.
+  useEffect(() => {
+    const out = () => setState((s) => ({ ...s, user: null }))
+    window.addEventListener('pareena:signed-out', out)
+    if (hasTokens()) getMe().then((user) => setState((s) => ({ ...s, user }))).catch(() => {})
+    else if (state.user) out()
+    return () => window.removeEventListener('pareena:signed-out', out)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const api = useMemo(() => {
     const set = (fn) => setState((s) => ({ ...s, ...fn(s) }))
     return {
-      // cart
-      addToCart: ({ productId, colour, lensId, rxId }) =>
-        set((s) => ({ cart: [...s.cart, { id: uid('item'), productId, colour, lensId, rxId }] })),
+      // cart: each line keeps a snapshot of the product and lens; the server re-prices at checkout
+      addToCart: ({ product, colour, lens, rxId }) =>
+        set((s) => ({
+          cart: [...s.cart, {
+            id: uid('item'),
+            product: { id: product.id, name: product.name, brand: product.brand, price: product.price, type: product.type, image: product.image },
+            variantId: colour.id,
+            colour: colour.name,
+            lens: lens ? { dbId: lens.dbId, id: lens.id, name: lens.name, price: lens.price } : null,
+            rxId: lens ? rxId : null,
+          }],
+        })),
       removeFromCart: (id) => set((s) => ({ cart: s.cart.filter((i) => i.id !== id) })),
       clearCart: () => set(() => ({ cart: [] })),
 
-      // prescriptions
-      savePrescription: (rx) => {
-        const id = rx.id || uid('rx')
-        set((s) => ({
-          prescriptions: [{ ...rx, id }, ...s.prescriptions.filter((p) => p.id !== id)],
-          activeRxId: id,
-          noPower: false,
-        }))
-        return id
-      },
+      // prescriptions (saved on the server; `id` is its reference)
+      addPrescription: (rx) => set((s) => ({
+        prescriptions: [rx, ...s.prescriptions.filter((p) => p.id !== rx.id)],
+        activeRxId: rx.id,
+        noPower: false,
+      })),
       setNoPower: (v) => set((s) => ({ noPower: v, activeRxId: v ? null : s.activeRxId })),
       setActiveRx: (id) => set(() => ({ activeRxId: id, noPower: false })),
 
       // account
       signIn: (user) => set(() => ({ user })),
-      signOut: () => set(() => ({ user: null })),
+      signOut: () => { setTokens(null); set(() => ({ user: null })) },
 
       // records
-      addOrder: (order) => set((s) => ({ orders: [order, ...s.orders] })),
-      updateOrder: (id, patch) => set((s) => ({ orders: s.orders.map((o) => (o.id === id ? { ...o, ...patch } : o)) })),
+      addOrderRef: (ref) => set((s) => ({ orderRefs: [ref, ...s.orderRefs.filter((r) => r !== ref)] })),
       addAppointment: (a) => set((s) => ({ appointments: [a, ...s.appointments] })),
-      addConsultation: (c) => set((s) => ({ consultations: [c, ...s.consultations] })),
+      addConsultationRef: (ref) => set((s) => ({ consultationRefs: [ref, ...s.consultationRefs] })),
     }
   }, [])
 
   const derived = useMemo(() => {
     const cartLines = state.cart
+      .filter((item) => item.product)
       .map((item) => {
-        const product = findProduct(item.productId)
-        if (!product) return null
-        const lens = item.lensId ? findLens(item.lensId) : null
         const rx = state.prescriptions.find((p) => p.id === item.rxId) || null
-        return { ...item, product, lens, rx, framePrice: product.price, lensPrice: lens ? lens.price : 0, total: product.price + (lens ? lens.price : 0) }
+        const lensPrice = item.lens ? item.lens.price : 0
+        return { ...item, rx, framePrice: item.product.price, lensPrice, total: item.product.price + lensPrice }
       })
-      .filter(Boolean)
     const activeRx = state.prescriptions.find((p) => p.id === state.activeRxId) || null
     return {
       cartLines,

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import Icon, { Spinner } from '../components/Icon'
 import { Alert, Field, Loading, Select } from '../components/ui'
-import { createAppointment, getSlots } from '../lib/api'
+import { createAppointment, errorMessage, getCalendar, getSlots, isoDate, timeLabel } from '../lib/api'
+import useAsync from '../lib/useAsync'
 import { STORE } from '../data/store'
 import { useApp } from '../state/AppState'
 
@@ -14,7 +15,7 @@ const sameDay = (a, b) => a && b && a.getTime() === b.getTime()
 const label = (d) => `${DAY[d.getDay()]} ${d.getDate()} ${MONTH[d.getMonth()]}`
 const PHONE_RE = /^(\+?91)?[6-9]\d{9}$/
 
-function MonthCalendar({ month, setMonth, selected, onPick, minDate, maxDate }) {
+function MonthCalendar({ month, setMonth, selected, onPick, minDate, maxDate, isOff }) {
   const first = new Date(month.getFullYear(), month.getMonth(), 1)
   const lead = (first.getDay() + 6) % 7
   const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate()
@@ -35,7 +36,7 @@ function MonthCalendar({ month, setMonth, selected, onPick, minDate, maxDate }) 
         {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <span key={d} className="label py-1.5">{d}</span>)}
         {cells.map((d, i) => {
           if (!d) return <span key={`b${i}`} />
-          const off = d < minDate || d > maxDate
+          const off = isOff(d)
           const on = sameDay(d, selected)
           return (
             <button key={d.toISOString()} type="button" disabled={off} onClick={() => onPick(d)} aria-pressed={on} aria-label={`${label(d)}${off ? ', not available' : ''}`}
@@ -50,16 +51,17 @@ function MonthCalendar({ month, setMonth, selected, onPick, minDate, maxDate }) 
   )
 }
 
-function DayStrip({ days, selected, onPick }) {
+function DayStrip({ days, selected, onPick, isOff }) {
   return (
     <div className="grid gap-3 md:hidden">
       <h2 className="display text-xl">1. Pick a day</h2>
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {days.map((d) => {
           const on = sameDay(d, selected)
+          const off = isOff(d)
           return (
-            <button key={d.toISOString()} type="button" aria-pressed={on} onClick={() => onPick(d)}
-              className={clsx('grid h-[72px] w-16 flex-none content-center justify-items-center gap-0.5 rounded-md', on ? 'border border-navy bg-navy text-[#fcfdff]' : 'border border-line-strong bg-card text-ink')}>
+            <button key={d.toISOString()} type="button" aria-pressed={on} disabled={off} onClick={() => onPick(d)} aria-label={`${label(d)}${off ? ', closed' : ''}`}
+              className={clsx('grid h-[72px] w-16 flex-none content-center justify-items-center gap-0.5 rounded-md', on ? 'border border-navy bg-navy text-[#fcfdff]' : off ? 'border border-dashed border-[#c3ccd9] bg-soft text-[#a3abbb]' : 'border border-line-strong bg-card text-ink')}>
               <span className={clsx('text-sm', on ? 'text-[#d9e2f3]' : 'text-muted')}>{DAY[d.getDay()]}</span>
               <span className="num text-xl font-semibold">{d.getDate()}</span>
             </button>
@@ -73,7 +75,9 @@ function DayStrip({ days, selected, onPick }) {
 export default function Book() {
   const { addAppointment, user } = useApp()
   const today = startOfDay(new Date())
-  const maxDate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30)
+  const { data: cal } = useAsync(getCalendar, [])
+  const maxDate = cal ? startOfDay(new Date(`${cal.last_date}T00:00`)) : new Date(today.getFullYear(), today.getMonth(), today.getDate() + 30)
+  const isOff = (d) => d < today || d > maxDate || Boolean(cal && (cal.closed_weekdays.includes((d.getDay() + 6) % 7) || cal.closed_dates.includes(isoDate(d))))
   const strip = useMemo(() => Array.from({ length: 14 }, (_, i) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + i)), [today.getTime()]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [month, setMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
@@ -85,7 +89,7 @@ export default function Book() {
   const [form, setForm] = useState({ name: user ? user.name : '', phone: user ? user.phone : '', email: '', who: 'Myself', reason: 'Routine check-up', notes: '' })
   const [errors, setErrors] = useState({})
   const [sending, setSending] = useState(false)
-  const [sendError, setSendError] = useState(false)
+  const [sendError, setSendError] = useState('')
   const [done, setDone] = useState(null)
 
   useEffect(() => {
@@ -97,6 +101,7 @@ export default function Book() {
 
   const pick = (d) => { setDay(d); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)) }
   const free = slots ? slots.filter((s) => !s.taken) : []
+  const timeText = time ? timeLabel(time) : null
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
 
   const submit = async (e) => {
@@ -108,14 +113,15 @@ export default function Book() {
     if (!PHONE_RE.test(digits)) er.phone = digits ? `Mobile numbers have 10 digits. This one has ${digits.replace(/^\+?91/, '').length}.` : 'We need a mobile number to send your reminder.'
     setErrors(er)
     if (Object.keys(er).length) return
-    setSending(true); setSendError(false)
+    setSending(true); setSendError('')
     try {
-      const a = await createAppointment({ ...form, date: day.toISOString(), dateLabel: label(day), time })
+      const a = { ...(await createAppointment(form, day, time)), dateLabel: label(day) }
       addAppointment(a)
       setDone(a)
       window.scrollTo({ top: 0 })
-    } catch {
-      setSendError(true)
+    } catch (err) {
+      setSendError(errorMessage(err))
+      if (err.response && err.response.data && err.response.data.time) setReload((n) => n + 1)
     } finally {
       setSending(false)
     }
@@ -128,7 +134,7 @@ export default function Book() {
           <div className="grid h-14 w-14 place-items-center rounded-full bg-success-soft text-success"><Icon name="tick" size={28} /></div>
           <div className="grid gap-2">
             <h1 className="display text-[40px] leading-10 md:text-5xl">You're booked</h1>
-            <p className="lede">We'll send a reminder to {done.phone} on WhatsApp the day before.</p>
+            <p className="lede">We'll call or message you on {done.phone} to confirm your booking.</p>
           </div>
           <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-4 gap-y-3 border-y border-line py-5">
             <dt className="text-muted">When</dt><dd className="font-semibold">{done.dateLabel}, {done.time}</dd>
@@ -155,8 +161,8 @@ export default function Book() {
 
       <form onSubmit={submit} noValidate className="grid items-start gap-8 md:grid-cols-[1.1fr_0.9fr]">
         <div className="grid gap-7 md:card md:gap-8 md:p-8">
-          <MonthCalendar month={month} setMonth={setMonth} selected={day} onPick={pick} minDate={today} maxDate={maxDate} />
-          <DayStrip days={strip} selected={day} onPick={pick} />
+          <MonthCalendar month={month} setMonth={setMonth} selected={day} onPick={pick} minDate={today} maxDate={maxDate} isOff={isOff} />
+          <DayStrip days={strip} selected={day} onPick={pick} isOff={isOff} />
           <hr className="hidden border-line md:block" />
           <div className="grid gap-3 md:gap-4">
             <div className="flex flex-wrap items-baseline justify-between gap-4">
@@ -186,9 +192,9 @@ export default function Book() {
               <>
                 <div className={clsx('grid grid-cols-3 gap-2 md:grid-cols-4', errors.time && 'rounded-md border-[1.5px] border-danger p-2')} role="radiogroup" aria-label="Time">
                   {slots.map((s) => {
-                    const on = s.time === time
+                    const on = s.value === time
                     return (
-                      <button key={s.time} type="button" role="radio" aria-checked={on} disabled={s.taken} onClick={() => setTime(s.time)} aria-label={`${s.time}${s.taken ? ', taken' : ''}`}
+                      <button key={s.value} type="button" role="radio" aria-checked={on} disabled={s.taken} onClick={() => setTime(s.value)} aria-label={`${s.time}${s.taken ? ', taken' : ''}`}
                         className={clsx('num min-h-11 rounded-sm text-[15px] font-medium', s.taken ? 'cursor-not-allowed border border-dashed border-[#c3ccd9] bg-soft text-[#6f7686] line-through' : on ? 'border border-navy bg-navy font-semibold text-[#fcfdff]' : 'border border-line-strong bg-card text-ink hover:border-ink')}>
                         {s.time}
                       </button>
@@ -209,9 +215,9 @@ export default function Book() {
         <div className="grid gap-5 border-t border-line pt-7 md:card md:border-t md:p-8">
           <h2 className="display text-xl md:text-2xl">3. Your details</h2>
           {Object.keys(errors).length > 0 && <Alert tone="bad" title={`Please fix ${Object.keys(errors).length} ${Object.keys(errors).length === 1 ? 'thing' : 'things'}`}>Then press Confirm booking again.</Alert>}
-          {sendError && <Alert tone="bad" title="Your booking didn't go through">The connection dropped. Everything you typed is still here, so try again.</Alert>}
+          {sendError && <Alert tone="bad" title="Your booking didn't go through">{sendError} Everything you typed is still here.</Alert>}
           <Field label="Full name" error={errors.name}>{(a) => <input {...a} className="input" autoComplete="name" value={form.name} onChange={set('name')} disabled={sending} />}</Field>
-          <Field label="Mobile number" error={errors.phone} help="We'll send a reminder on WhatsApp the day before.">{(a) => <input {...a} className="input num" type="tel" autoComplete="tel" placeholder="98450 12345" value={form.phone} onChange={set('phone')} disabled={sending} />}</Field>
+          <Field label="Mobile number" error={errors.phone} help="We'll use this to confirm your booking.">{(a) => <input {...a} className="input num" type="tel" autoComplete="tel" placeholder="98450 12345" value={form.phone} onChange={set('phone')} disabled={sending} />}</Field>
           <Field label="Email" optional>{(a) => <input {...a} className="input" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} onChange={set('email')} disabled={sending} />}</Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Who is the test for?">{(a) => <Select {...a} value={form.who} onChange={set('who')} disabled={sending}><option>Myself</option><option>My child</option><option>A parent</option><option>Someone else</option></Select>}</Field>
@@ -222,7 +228,7 @@ export default function Book() {
           <div className="fixed inset-x-0 bottom-0 z-30 grid gap-2.5 border-t border-line bg-card px-4 pb-5 pt-3 md:static md:border-0 md:bg-transparent md:p-0">
             <div className="flex justify-between gap-2 text-sm md:grid md:gap-1.5 md:rounded-md md:bg-soft md:p-4">
               <span className="text-muted md:label">Your booking</span>
-              <span className="font-semibold md:text-lg">{label(day)}, {time || 'pick a time'}</span>
+              <span className="font-semibold md:text-lg">{label(day)}, {timeText || 'pick a time'}</span>
               <span className="hidden text-sm text-muted md:block">{STORE.name}, Ameerpet</span>
             </div>
             <button type="submit" className="btn btn-primary w-full" disabled={sending} aria-busy={sending}>
